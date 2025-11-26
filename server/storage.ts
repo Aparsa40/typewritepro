@@ -1,37 +1,59 @@
-import { type User, type InsertUser } from "@shared/schema";
+import { type Document, type InsertDocument } from "@shared/schema";
 import { randomUUID } from "crypto";
 
-// modify the interface with any CRUD methods
-// you might need
-
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getDocument(id: string): Promise<Document | undefined>;
+  getDocuments(): Promise<Document[]>;
+  createDocument(doc: InsertDocument): Promise<Document>;
+  updateDocument(id: string, doc: Partial<InsertDocument>): Promise<Document | undefined>;
+  deleteDocument(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+  private documents: Map<string, Document>;
 
   constructor() {
-    this.users = new Map();
+    this.documents = new Map();
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getDocument(id: string): Promise<Document | undefined> {
+    return this.documents.get(id);
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
+  async getDocuments(): Promise<Document[]> {
+    return Array.from(this.documents.values()).sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
+  async createDocument(insertDoc: InsertDocument): Promise<Document> {
     const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+    const now = new Date().toISOString();
+    const doc: Document = {
+      id,
+      ...insertDoc,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.documents.set(id, doc);
+    return doc;
+  }
+
+  async updateDocument(id: string, updateDoc: Partial<InsertDocument>): Promise<Document | undefined> {
+    const existing = this.documents.get(id);
+    if (!existing) return undefined;
+
+    const updated: Document = {
+      ...existing,
+      ...updateDoc,
+      updatedAt: new Date().toISOString(),
+    };
+    this.documents.set(id, updated);
+    return updated;
+  }
+
+  async deleteDocument(id: string): Promise<boolean> {
+    return this.documents.delete(id);
   }
 }
 

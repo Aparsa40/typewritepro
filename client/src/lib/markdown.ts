@@ -18,7 +18,7 @@ function addDirectionToElements(html: string): string {
     const htmlEl = element as HTMLElement;
     htmlEl.style.direction = direction;
     htmlEl.style.textAlign = direction === "rtl" ? "right" : "left";
-    
+
     if (element.tagName === "BLOCKQUOTE") {
       if (direction === "rtl") {
         htmlEl.style.borderRight = "4px solid hsl(217, 91%, 60%)";
@@ -37,19 +37,46 @@ function addDirectionToElements(html: string): string {
   return tempDiv.innerHTML;
 }
 
+function addDirectionToPlainText(text: string): string {
+  if (!text || typeof document === "undefined") return text;
+
+  const direction = detectParagraphDirection(text);
+  const escapedText = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+  return `<div style="direction: ${direction}; text-align: ${direction === "rtl" ? "right" : "left"}; white-space: pre-wrap; word-wrap: break-word;">${escapedText}</div>`;
+}
+
 export function renderMarkdown(content: string, autoDirection: boolean = true): string {
   if (!content) return "";
-  
+
   try {
+    // Check if content is plain text (no markdown syntax)
+    const hasMarkdown = /[#*_~`>\-|[\]()]/m.test(content);
+
+    if (!hasMarkdown && autoDirection && typeof document !== "undefined") {
+      // Plain text without markdown - apply direction per-paragraph
+      return addDirectionToPlainText(content);
+    }
+
+    // Parse markdown with marked
     const html = marked.parse(content) as string;
-    
+
+    // For plain text lines in markdown content, each <p> will get direction applied
     if (autoDirection && typeof document !== "undefined") {
       return addDirectionToElements(html);
     }
-    
+
     return html;
   } catch (error) {
     console.error("Markdown parsing error:", error);
+    if (autoDirection && typeof document !== "undefined") {
+      return addDirectionToPlainText(content);
+    }
     return `<p>${content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`;
   }
 }

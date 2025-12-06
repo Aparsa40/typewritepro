@@ -1,0 +1,53 @@
+<!-- Auto-generated guidance for AI coding agents working on this repository -->
+# Copilot instructions — TypeWriterPro
+
+Purpose: give AI coding agents the minimal, actionable knowledge to be productive in this repo.
+
+- Project root: this is a monorepo-like single package with a `client/` React + Vite frontend and a `server/` Express + TypeScript backend. Shared types live in `shared/`.
+
+- Key entry points:
+  - `package.json` scripts: `dev` runs `tsx server/index-dev.ts` (local dev server + Vite), `build` runs `vite build` and bundles `server/index-prod.ts` to `dist/index.js`, `start` runs the built server.
+  - Frontend: `client/src/main.tsx` and `client/index.html` (Vite). Major UI is in `client/src/components/` (see `editor/` for the document flow).
+  - Backend: `server/app.ts`, `server/index-dev.ts`, `server/index-prod.ts`, and `server/routes.ts`.
+
+- Big picture architecture and data flow:
+  - Frontend (Vite React) communicates with the Express backend via standard HTTP routes defined in `server/routes.ts`.
+  - Shared data schemas and types are centralized in `shared/schema.ts` — prefer using these when changing API payloads.
+  - The editor UI uses a Monaco-based component at `client/src/components/editor/MonacoEditor.tsx`, with preview rendering in `MarkdownPreview.tsx` and markdown helpers in `client/src/lib/markdown.ts`.
+
+- Developer workflows (commands to run):
+  - Local dev (frontend + backend): `npm run dev` — this runs `tsx server/index-dev.ts` and uses Vite for the frontend.
+  - Build production artifact: `npm run build` — builds frontend with Vite, bundles backend with `esbuild` to `dist/index.js`.
+  - Run built production: `npm run start` (requires `npm run build` first).
+  - Type check: `npm run check` (runs `tsc`).
+  - DB migrations/push: `npm run db:push` (uses `drizzle-kit`).
+
+- Project-specific conventions and patterns:
+  - One-package layout: server and client live in the same repo and share `node_modules`; changes to types in `shared/` affect both sides immediately.
+  - Use `zod` + `drizzle-zod` for schemas in some places — check `shared/schema.ts` and `server/` for examples.
+  - UI components are organized under `client/src/components/ui/*` as small, composable primitives. Editor-related features are under `client/src/components/editor/*`.
+  - Styling: Tailwind is used (`tailwind.config.ts`, `client/index.css`). Follow existing utility classes — avoid adding global CSS files unless necessary.
+
+- Integration points and external dependencies to be mindful of:
+  - Database: `drizzle-orm` + `drizzle-kit` — DB push uses `db:push` script.
+  - Session/auth: express-session + passport; check `server/app.ts` for session store setup and `storage.ts` for persistence.
+  - Replit/Vite plugins are present in `devDependencies` — those are used during development (safe to leave in place).
+
+- Typical change pattern examples (copyable snippets):
+  - When adding a new API route, update `server/routes.ts`, and add corresponding types to `shared/schema.ts` to keep client/server in sync.
+  - To add a new editor feature, prefer creating a small component under `client/src/components/editor/`, wire it into `MenuBar.tsx`, and rely on `MonacoEditor.tsx` events for content changes.
+
+- Tests and debugging:
+  - There are no test scripts in `package.json`. Use `npm run check` for type errors and run the app with `npm run dev` for runtime checks.
+  - Backend debugging: run `npm run dev` and attach a Node debugger to the `tsx` process, or add logging in `server/app.ts` / `server/routes.ts`.
+
+- When editing files, watch for:
+  - Shared type changes: update `shared/schema.ts` and then run `tsc` and `npm run dev` to catch mismatches.
+  - Server bundling: `build` bundles `server/index-prod.ts` with `esbuild` — avoid Node-only APIs in server code unless they are externalized in `build` config.
+
+- Files to inspect first for context on any task:
+  - `server/app.ts`, `server/index-dev.ts`, `server/index-prod.ts`, `server/routes.ts`, `server/storage.ts`
+  - `client/src/main.tsx`, `client/src/components/editor/MonacoEditor.tsx`, `client/src/lib/markdown.ts`, `client/src/components/editor/MarkdownPreview.tsx`
+  - `shared/schema.ts`, `drizzle.config.ts`, `package.json`, `vite.config.ts`
+
+If anything above is unclear or you want deeper examples (e.g., request/response shapes, common state flows in the editor, or typical refactors), tell me which area to expand and I will iterate.

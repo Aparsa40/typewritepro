@@ -14,6 +14,7 @@ interface EditorState {
   showTableBuilder: boolean;
   headings: Heading[];
   cursorPosition: { line: number; column: number };
+  scrollPosition: { editor: number; preview: number };
   wordCount: number;
   charCount: number;
   detectedDirection: "ltr" | "rtl" | "mixed";
@@ -28,6 +29,7 @@ interface EditorState {
   toggleTableBuilder: () => void;
   setHeadings: (headings: Heading[]) => void;
   setCursorPosition: (line: number, column: number) => void;
+  setScrollPosition: (position: "editor" | "preview", value: number) => void;
   setWordCount: (count: number) => void;
   setCharCount: (count: number) => void;
   setDetectedDirection: (direction: "ltr" | "rtl" | "mixed") => void;
@@ -91,6 +93,7 @@ export const useEditorStore = create<EditorState>()(
       showTableBuilder: false,
       headings: [],
       cursorPosition: { line: 1, column: 1 },
+      scrollPosition: { editor: 0, preview: 0 },
       wordCount: 0,
       charCount: 0,
       detectedDirection: "ltr",
@@ -119,6 +122,10 @@ export const useEditorStore = create<EditorState>()(
       
       setHeadings: (headings) => set({ headings }),
       setCursorPosition: (line, column) => set({ cursorPosition: { line, column } }),
+      setScrollPosition: (position, value) =>
+        set((state) => ({
+          scrollPosition: { ...state.scrollPosition, [position]: value },
+        })),
       setWordCount: (count) => set({ wordCount: count }),
       setCharCount: (count) => set({ charCount: count }),
       setDetectedDirection: (direction) => set({ detectedDirection: direction }),

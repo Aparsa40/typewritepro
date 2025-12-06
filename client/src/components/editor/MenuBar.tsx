@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
 import {
   File,
   FilePlus,
@@ -7,6 +7,7 @@ import {
   Download,
   FileText,
   FileCode,
+  Cloud,
   Undo2,
   Redo2,
   Search,
@@ -39,8 +40,17 @@ import {
 import { useEditorStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { renderMarkdown } from "@/lib/markdown";
+import { exportToMarkdown, exportToHTML, exportToPDF } from "@/lib/export";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { HeadingDialog } from "./dialogs/HeadingDialog";
+import { FooterDialog } from "./dialogs/FooterDialog";
+import { BoxDialog } from "./dialogs/BoxDialog";
+import { TableDialog } from "./dialogs/TableDialog";
+import { CodeDialog } from "./dialogs/CodeDialog";
+import { ParagraphDialog } from "./dialogs/ParagraphDialog";
+import { HeaderTemplateDialog } from "./dialogs/HeaderTemplateDialog";
+import { BorderDialog } from "./dialogs/BorderDialog";
 
 export function MenuBar() {
   const {
@@ -108,68 +118,39 @@ export function MenuBar() {
   }, [content, toast]);
 
   const handleExportMarkdown = useCallback(() => {
-    const blob = new Blob([content], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "document.md";
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({
-      title: "Export Complete",
-      description: "Markdown file exported successfully.",
-    });
+    try {
+      exportToMarkdown(content, "document.md");
+      toast({
+        title: "Export Complete",
+        description: "Markdown file exported successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to export Markdown file.",
+        variant: "destructive",
+      });
+    }
   }, [content, toast]);
 
   const handleExportHTML = useCallback(() => {
-    const html = renderMarkdown(content, true);
-    const fullHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Exported Document</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    body {
-      font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 2rem;
-      line-height: 1.7;
-      color: #1a1a1a;
+    try {
+      const html = renderMarkdown(content, true);
+      exportToHTML(content, html, "document.html", {
+        title: "TypeWriterPro Document",
+        date: new Date(),
+      });
+      toast({
+        title: "Export Complete",
+        description: "HTML file exported successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Export Failed",
+        description: "Failed to export HTML file.",
+        variant: "destructive",
+      });
     }
-    h1, h2, h3, h4, h5, h6 { font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; }
-    h1 { font-size: 2rem; }
-    h2 { font-size: 1.5rem; }
-    h3 { font-size: 1.25rem; }
-    a { color: #2563eb; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    code { font-family: 'JetBrains Mono', monospace; background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.875em; }
-    pre { background: #f6f8fa; padding: 1rem; border-radius: 8px; overflow-x: auto; }
-    pre code { background: transparent; padding: 0; }
-    blockquote { margin: 1em 0; padding: 0.5em 1em; border-left: 4px solid #2563eb; background: rgba(0,0,0,0.02); }
-    table { width: 100%; border-collapse: collapse; margin: 1em 0; }
-    th, td { border: 1px solid #e0e0e0; padding: 0.5em 1em; text-align: left; }
-    th { background: rgba(0,0,0,0.02); font-weight: 600; }
-  </style>
-</head>
-<body>
-${html}
-</body>
-</html>`;
-
-    const blob = new Blob([fullHtml], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "document.html";
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({
-      title: "Export Complete",
-      description: "HTML file exported successfully.",
-    });
   }, [content, toast]);
 
   const handleExportPDF = useCallback(async () => {
@@ -180,75 +161,10 @@ ${html}
 
     try {
       const html = renderMarkdown(content, true);
-      
-      const container = document.createElement("div");
-      container.style.cssText = `
-        position: fixed;
-        left: -9999px;
-        top: 0;
-        width: 800px;
-        padding: 40px;
-        background: white;
-        font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
-        line-height: 1.7;
-        color: #1a1a1a;
-      `;
-      container.innerHTML = `
-        <style>
-          h1, h2, h3, h4, h5, h6 { font-weight: 600; margin-top: 1.5em; margin-bottom: 0.5em; }
-          h1 { font-size: 2rem; }
-          h2 { font-size: 1.5rem; }
-          h3 { font-size: 1.25rem; }
-          a { color: #2563eb; }
-          code { font-family: 'JetBrains Mono', monospace; background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.875em; }
-          pre { background: #f6f8fa; padding: 1rem; border-radius: 8px; overflow-x: auto; }
-          pre code { background: transparent; padding: 0; }
-          blockquote { margin: 1em 0; padding: 0.5em 1em; border-left: 4px solid #2563eb; background: rgba(0,0,0,0.02); }
-          table { width: 100%; border-collapse: collapse; margin: 1em 0; }
-          th, td { border: 1px solid #e0e0e0; padding: 0.5em 1em; text-align: left; }
-          th { background: rgba(0,0,0,0.02); font-weight: 600; }
-        </style>
-        ${html}
-      `;
-      document.body.appendChild(container);
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
+      await exportToPDF(html, "document.pdf", {
+        title: "TypeWriterPro Document",
+        date: new Date(),
       });
-
-      document.body.removeChild(container);
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save("document.pdf");
-
       toast({
         title: "Export Complete",
         description: "PDF file exported successfully.",
@@ -283,6 +199,76 @@ ${html}
       editor.getAction("editor.action.startFindReplaceAction")?.run();
     }
   }, []);
+
+  // Google Drive integration (client side)
+  const [driveTokenId, setDriveTokenId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('driveTokenId');
+    } catch (e) {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      // Expect { tokenId }
+      if (e?.data && typeof e.data === 'object' && e.data.tokenId) {
+        setDriveTokenId(e.data.tokenId);
+        try { localStorage.setItem('driveTokenId', e.data.tokenId); } catch {}
+        toast({ title: 'Drive Connected', description: 'Connected to Google Drive.' });
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [toast]);
+
+  const connectToDrive = useCallback(() => {
+    const popup = window.open('/auth/google', 'google-drive-auth', 'width=600,height=700');
+    if (!popup) {
+      toast({ title: 'Popup Blocked', description: 'Please allow popups for this site.', variant: 'destructive' });
+    }
+  }, [toast]);
+
+  const saveToDrive = useCallback(async (format: 'html' | 'md' | 'pdf') => {
+    if (!driveTokenId) {
+      toast({ title: 'Not connected', description: 'Please connect to Google Drive first.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      let name = 'document';
+      let mimeType = 'text/plain';
+      let contentToUpload = '';
+
+      if (format === 'md') {
+        name = 'document.md';
+        mimeType = 'text/markdown';
+        contentToUpload = content;
+      } else if (format === 'html') {
+        name = 'document.html';
+        mimeType = 'text/html';
+        contentToUpload = renderMarkdown(content, true);
+      } else {
+        // pdf: generate as Blob via exportToPDF flow but exportToPDF returns file via save
+        // Instead, create HTML and upload as pdf by asking server to convert is complex; fallback: upload HTML with .pdf name (not perfect)
+        name = 'document.pdf';
+        mimeType = 'application/pdf';
+        contentToUpload = renderMarkdown(content, true);
+      }
+
+      const resp = await fetch('/api/drive/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tokenId: driveTokenId, name, mimeType, content: contentToUpload }),
+      });
+      const json = await resp.json();
+      if (!resp.ok) throw json;
+      toast({ title: 'Saved to Drive', description: `Saved ${name} to your Drive.` });
+    } catch (err) {
+      console.error('Save to Drive error', err);
+      toast({ title: 'Upload failed', description: 'Failed to upload to Drive.', variant: 'destructive' });
+    }
+  }, [driveTokenId, content, renderMarkdown, toast]);
 
   return (
     <header className="h-12 border-b bg-background flex items-center justify-between px-2 gap-1 flex-shrink-0" data-testid="menu-bar">
@@ -338,6 +324,19 @@ ${html}
                 <DropdownMenuItem onClick={handleExportPDF} data-testid="menu-export-pdf">
                   <File className="mr-2 h-4 w-4" />
                   Export as PDF
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={connectToDrive} data-testid="menu-drive-connect">
+                  <Cloud className="mr-2 h-4 w-4" />
+                  Connect to Google Drive
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => saveToDrive('md')} data-testid="menu-drive-save-md">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Save MD to Drive
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => saveToDrive('html')} data-testid="menu-drive-save-html">
+                  <FileCode className="mr-2 h-4 w-4" />
+                  Save HTML to Drive
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
@@ -427,6 +426,23 @@ ${html}
               <List className="mr-2 h-4 w-4" />
               Document Outline
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <FileCode className="mr-2 h-4 w-4" />
+                Markdown Tools
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="flex flex-col gap-1 p-2">
+                <HeadingDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <HeaderTemplateDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <FooterDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <BoxDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <BorderDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <TableDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <CodeDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <ParagraphDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={toggleSettings} data-testid="menu-tools-settings">
               <Settings className="mr-2 h-4 w-4" />

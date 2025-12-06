@@ -1,6 +1,44 @@
-node_modules
-dist
-.DS_Store
-server/public
-vite.config.ts.*
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+build/
 *.tar.gz
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-workspace
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Cache
+.eslintcache
+.cache/
+.next/
+
+# OS specific
+Thumbs.db
+.DS_Store
+
+# Project specific
+server/public/
+.local/
+vite.config.ts.*
+.replit

@@ -12,15 +12,51 @@ export function MonacoEditor() {
     theme,
     settings,
     setCursorPosition,
+    setScrollPosition,
     setWordCount,
     setCharCount,
     setDetectedDirection,
     setHeadings,
+    scrollPosition,
   } = useEditorStore();
 
   const handleEditorDidMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
-    
+
+    // Add paste event listener to support context-menu Paste
+    const editorDom = editor.getDomNode();
+    if (editorDom) {
+      const handlePaste = async (e: ClipboardEvent) => {
+        e.preventDefault();
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && editor) {
+            const selection = editor.getSelection();
+            if (selection) {
+              editor.executeEdits("paste-event", [
+                {
+                  range: selection,
+                  text,
+                  forceMoveMarkers: true,
+                },
+              ]);
+            }
+          }
+        } catch (err) {
+          console.warn("Clipboard paste failed:", err);
+        }
+      };
+      editorDom.addEventListener('paste', handlePaste);
+    }
+
+    // Set editor container to dir='auto' for per-paragraph RTL/LTR handling
+    const dom = editor.getDomNode();
+    if (dom) {
+      dom.setAttribute('dir', 'auto');
+      (dom as HTMLElement).style.textAlign = 'start';
+    }
+
+    // تعریف تم‌ها
     monaco.editor.defineTheme("typewriter-light", {
       base: "vs",
       inherit: true,
@@ -69,29 +105,40 @@ export function MonacoEditor() {
       setCursorPosition(e.position.lineNumber, e.position.column);
     });
 
+    const isSyncingFromPreview = { current: false };
+    editor.onDidScrollChange(() => {
+      if (!editorRef.current) return;
+      const scrollTop = editorRef.current.getScrollTop();
+      const scrollHeight = editorRef.current.getScrollHeight();
+      const clientHeight = editorRef.current.getLayoutInfo().height;
+      const scrollPercent = scrollHeight > clientHeight ? (scrollTop / (scrollHeight - clientHeight)) * 100 : 0;
+      if ((editor as any).__isSyncingFromPreview) {
+        (editor as any).__isSyncingFromPreview = false;
+        return;
+      }
+      setScrollPosition("editor", scrollPercent);
+    });
+
     editor.focus();
-  }, [setCursorPosition]);
+  }, [setCursorPosition, setScrollPosition]);
 
   const handleChange: OnChange = useCallback(
     (value) => {
       const newContent = value || "";
       setContent(newContent);
-      
-      const direction = detectTextDirection(newContent);
-      setDetectedDirection(direction);
-      
+
+      // Update overall document direction for status display
+      setDetectedDirection(detectTextDirection(newContent));
       setWordCount(countWords(newContent));
       setCharCount(countCharacters(newContent));
-      
-      const headings = extractHeadings(newContent);
-      setHeadings(headings);
+      setHeadings(extractHeadings(newContent));
     },
     [setContent, setDetectedDirection, setWordCount, setCharCount, setHeadings]
   );
 
   useEffect(() => {
-    const direction = detectTextDirection(content);
-    setDetectedDirection(direction);
+    // Initialize direction detection on mount
+    setDetectedDirection(detectTextDirection(content));
     setWordCount(countWords(content));
     setCharCount(countCharacters(content));
     setHeadings(extractHeadings(content));
@@ -105,29 +152,29 @@ export function MonacoEditor() {
     }
   }, []);
 
-  useEffect(() => {
-    (window as any).goToEditorLine = goToLine;
-  }, [goToLine]);
+  useEffect(() => { (window as any).goToEditorLine = goToLine; }, [goToLine]);
 
   const insertText = useCallback((text: string) => {
     if (editorRef.current) {
       const selection = editorRef.current.getSelection();
       if (selection) {
-        editorRef.current.executeEdits("insert-text", [
-          {
-            range: selection,
-            text,
-            forceMoveMarkers: true,
-          },
-        ]);
+        editorRef.current.executeEdits("insert-text", [{ range: selection, text, forceMoveMarkers: true }]);
         editorRef.current.focus();
       }
     }
   }, []);
 
+  useEffect(() => { (window as any).insertTextAtCursor = insertText; }, [insertText]);
+
   useEffect(() => {
-    (window as any).insertTextAtCursor = insertText;
-  }, [insertText]);
+    if (!editorRef.current || !scrollPosition) return;
+    const previewPercent = scrollPosition.preview ?? 0;
+    const scrollHeight = editorRef.current.getScrollHeight();
+    const clientHeight = editorRef.current.getLayoutInfo().height;
+    const top = scrollHeight > clientHeight ? (previewPercent / 100) * (scrollHeight - clientHeight) : 0;
+    (editorRef.current as any).__isSyncingFromPreview = true;
+    editorRef.current.setScrollTop(top);
+  }, [scrollPosition?.preview]);
 
   return (
     <div className="h-full w-full" data-testid="monaco-editor-container">

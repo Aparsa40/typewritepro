@@ -343,7 +343,7 @@ For contribution guidelines and setup:
 ## 📞 Support & Contact
 
 - **GitHub Issues** - For bug reports
-- **Email** - [your-email@example.com]
+- **Email** - [parssstore.ir@gmail.com]
 - **Documentation** - See `design_guidelines.md` for architecture details
 
 ---

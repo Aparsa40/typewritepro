@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/resizable";
 
 export default function EditorPage() {
-  const { theme, showPreview, showSidebar } = useEditorStore();
+  const { theme, showPreview, showSidebar, previewMode } = useEditorStore();
 
   useEffect(() => {
     if (theme === "dark") {
@@ -69,7 +69,15 @@ export default function EditorPage() {
         
         <main className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-hidden">
-            {showPreview ? (
+            {previewMode === "preview-full" ? (
+              <div className="h-full w-full">
+                <MarkdownPreview />
+              </div>
+            ) : previewMode === "editor-full" ? (
+              <div className="h-full w-full">
+                <MonacoEditor />
+              </div>
+            ) : showPreview ? (
               <ResizablePanelGroup direction="horizontal" className="h-full">
                 <ResizablePanel defaultSize={50} minSize={30} className="h-full">
                   <MonacoEditor />

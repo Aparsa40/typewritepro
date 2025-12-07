@@ -40,26 +40,37 @@ function addDirectionToElements(html: string): string {
 function addDirectionToPlainText(text: string): string {
   if (!text || typeof document === "undefined") return text;
 
-  const direction = detectParagraphDirection(text);
-  const escapedText = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  // Split into paragraphs by empty lines and wrap each paragraph with its own direction
+  const paragraphs = text.split(/\n{2,}/g);
 
-  return `<div style="direction: ${direction}; text-align: ${direction === "rtl" ? "right" : "left"}; white-space: pre-wrap; word-wrap: break-word;">${escapedText}</div>`;
+  const wrapped = paragraphs
+    .map((p) => {
+      const trimmed = p.trim();
+      if (!trimmed) return "";
+      const direction = detectParagraphDirection(trimmed);
+      const escaped = trimmed
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+      return `<p dir="${direction}" style="direction: ${direction}; text-align: ${direction === "rtl" ? "right" : "left"}; white-space: pre-wrap; word-break: break-word; margin: 0 0 1rem 0;">${escaped}</p>`;
+    })
+    .join("\n");
+
+  return `<div class=\"markdown-preview\">${wrapped}</div>`;
 }
 
 export function renderMarkdown(content: string, autoDirection: boolean = true): string {
   if (!content) return "";
 
   try {
-    // Check if content is plain text (no markdown syntax)
-    const hasMarkdown = /[#*_~`>\-|[\]()]/m.test(content);
+    // Check if content appears to contain markdown structures (headings, lists, code fences, links, blockquotes)
+    const hasMarkdown = /(^#{1,6}\s)|(^\s*[-*+]\s)|(^\s*\d+\.\s)|(```)|(`[^`]+`)|(\[[^\]]+\]\([^\)]+\))|(^>\s)|(^-{3,}\s*$)/m.test(content);
 
     if (!hasMarkdown && autoDirection && typeof document !== "undefined") {
-      // Plain text without markdown - apply direction per-paragraph
+      // Plain text without markdown - apply per-paragraph direction detection
       return addDirectionToPlainText(content);
     }
 
@@ -89,6 +100,12 @@ export function getMarkdownStyles(theme: "light" | "dark"): string {
       font-family: 'Inter', 'Vazirmatn', system-ui, sans-serif;
       line-height: 1.7;
       color: ${isDark ? "#e0e0e0" : "#1a1a1a"};
+      box-sizing: border-box;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      padding: 0 0.5rem;
+      max-width: 100%;
     }
     
     .markdown-preview h1,

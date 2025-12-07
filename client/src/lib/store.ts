@@ -10,6 +10,17 @@ interface EditorState {
   settings: EditorSettings;
   showSidebar: boolean;
   showPreview: boolean;
+  previewMode: "split" | "preview-full" | "editor-full";
+  pageSettings: {
+    backgroundColor: string;
+    fontFamily: string;
+    fontSize: number;
+    padding: number;
+    borderStyle: "none" | "single" | "double";
+    borderColor: string;
+    borderWidth: number;
+    headerLine: boolean;
+  };
   showSettings: boolean;
   showTableBuilder: boolean;
   headings: Heading[];
@@ -30,6 +41,8 @@ interface EditorState {
   setHeadings: (headings: Heading[]) => void;
   setCursorPosition: (line: number, column: number) => void;
   setScrollPosition: (position: "editor" | "preview", value: number) => void;
+  setPreviewMode: (mode: "split" | "preview-full" | "editor-full") => void;
+  setPageSettings: (settings: Partial<EditorState["pageSettings"]>) => void;
   setWordCount: (count: number) => void;
   setCharCount: (count: number) => void;
   setDetectedDirection: (direction: "ltr" | "rtl" | "mixed") => void;
@@ -89,6 +102,17 @@ export const useEditorStore = create<EditorState>()(
       settings: defaultSettings,
       showSidebar: true,
       showPreview: true,
+      previewMode: "split",
+      pageSettings: {
+        backgroundColor: "#ffffff",
+        fontFamily: "Inter",
+        fontSize: 16,
+        padding: 32,
+        borderStyle: "none",
+        borderColor: "#e5e7eb",
+        borderWidth: 1,
+        headerLine: true,
+      },
       showSettings: false,
       showTableBuilder: false,
       headings: [],
@@ -126,6 +150,9 @@ export const useEditorStore = create<EditorState>()(
         set((state) => ({
           scrollPosition: { ...state.scrollPosition, [position]: value },
         })),
+      setPreviewMode: (mode) => set({ previewMode: mode }),
+      setPageSettings: (newSettings) =>
+        set((state) => ({ pageSettings: { ...state.pageSettings, ...newSettings } })),
       setWordCount: (count) => set({ wordCount: count }),
       setCharCount: (count) => set({ charCount: count }),
       setDetectedDirection: (direction) => set({ detectedDirection: direction }),

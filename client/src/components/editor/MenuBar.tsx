@@ -51,6 +51,7 @@ import { CodeDialog } from "./dialogs/CodeDialog";
 import { ParagraphDialog } from "./dialogs/ParagraphDialog";
 import { HeaderTemplateDialog } from "./dialogs/HeaderTemplateDialog";
 import { BorderDialog } from "./dialogs/BorderDialog";
+import { PageSettingsDialog } from "./dialogs/PageSettingsDialog";
 
 export function MenuBar() {
   const {
@@ -59,6 +60,9 @@ export function MenuBar() {
     setTheme,
     showSidebar,
     showPreview,
+    previewMode,
+    setPreviewMode,
+    setContent,
     toggleSidebar,
     togglePreview,
     toggleSettings,
@@ -199,6 +203,36 @@ export function MenuBar() {
       editor.getAction("editor.action.startFindReplaceAction")?.run();
     }
   }, []);
+
+  const handleSaveSelection = useCallback(() => {
+    const selection = window.getSelection?.();
+    if (!selection) return;
+    const text = selection.toString();
+    if (!text) return;
+    try {
+      const existing = JSON.parse(localStorage.getItem('savedSelections') || '[]');
+      existing.push({ id: crypto.randomUUID?.() || Date.now(), text, createdAt: new Date().toISOString() });
+      localStorage.setItem('savedSelections', JSON.stringify(existing));
+      toast({ title: 'Selection Saved', description: 'Saved highlighted selection locally.' });
+    } catch (e) {
+      console.error('Save selection error', e);
+      toast({ title: 'Save failed', description: 'Could not save the selection.', variant: 'destructive' });
+    }
+  }, [toast]);
+
+  const openAsLiveHTML = useCallback(() => {
+    const win = window.open('', '_blank');
+    if (!win) {
+      toast({ title: 'Popup Blocked', description: 'Allow popups to render live HTML.', variant: 'destructive' });
+      return;
+    }
+    // If content looks like full HTML or has tags, render it directly; otherwise render the markdown output
+    const isHtml = /^\s*\</.test(content);
+    const out = isHtml ? content : renderMarkdown(content, true);
+    win.document.open();
+    win.document.write(out);
+    win.document.close();
+  }, [content, toast]);
 
   // Google Drive integration (client side)
   const [driveTokenId, setDriveTokenId] = useState<string | null>(() => {
@@ -371,6 +405,10 @@ export function MenuBar() {
               Replace
               <DropdownMenuShortcut>Ctrl+H</DropdownMenuShortcut>
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSaveSelection} data-testid="menu-edit-save-selection">
+              <FileText className="mr-2 h-4 w-4" />
+              Save Selection
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -396,6 +434,10 @@ export function MenuBar() {
                 <Eye className="mr-2 h-4 w-4" />
               )}
               {showPreview ? "Hide Preview" : "Show Preview"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPreviewMode(previewMode === 'preview-full' ? 'split' : 'preview-full')}>
+              <Eye className="mr-2 h-4 w-4" />
+              {previewMode === 'preview-full' ? 'Exit Fullscreen Preview' : 'Enter Fullscreen Preview'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as "light" | "dark")}>
@@ -434,13 +476,17 @@ export function MenuBar() {
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="flex flex-col gap-1 p-2">
                 <HeadingDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
-                <HeaderTemplateDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
-                <FooterDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <HeaderTemplateDialog onInsert={(text) => { setContent(text + "\n\n" + content); }} />
+                <FooterDialog onInsert={(text) => { setContent(content + "\n\n" + text); }} />
                 <BoxDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
                 <BorderDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
                 <TableDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
                 <CodeDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
                 <ParagraphDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
+                <PageSettingsDialog />
+                <div className="px-2">
+                  <Button variant="ghost" size="sm" onClick={openAsLiveHTML} className="w-full text-xs">Render as Live HTML/CSS/JS</Button>
+                </div>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />

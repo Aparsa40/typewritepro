@@ -177,7 +177,7 @@ export function MonacoEditor() {
   }, [scrollPosition?.preview]);
 
   return (
-    <div className="h-full w-full" data-testid="monaco-editor-container">
+    <div className="h-full w-full" data-testid="monaco-editor-container" style={{ overflowX: 'auto', padding: '0.5rem', boxSizing: 'border-box' }}>
       <Editor
         height="100%"
         defaultLanguage="markdown"

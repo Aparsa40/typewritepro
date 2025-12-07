@@ -4,7 +4,7 @@ import { renderMarkdown, getMarkdownStyles } from "@/lib/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function MarkdownPreview() {
-  const { content, theme, settings, scrollPosition, setScrollPosition, cursorPosition } = useEditorStore();
+  const { content, theme, settings, scrollPosition, setScrollPosition, cursorPosition, pageSettings } = useEditorStore();
   const previewRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const isSyncingFromEditor = useRef(false);
@@ -26,6 +26,23 @@ export function MarkdownPreview() {
       });
     }
   }, [html]);
+
+  // Apply header line and sticky behavior if requested in page settings
+  useEffect(() => {
+    if (!previewRef.current) return;
+    const headerEl = previewRef.current.querySelector("header") as HTMLElement | null;
+    if (!headerEl) return;
+    if (pageSettings?.headerLine) {
+      headerEl.style.position = "sticky";
+      headerEl.style.top = "0";
+      headerEl.style.zIndex = "10";
+      headerEl.style.background = pageSettings.backgroundColor || "transparent";
+      headerEl.style.borderBottom = `${pageSettings.borderWidth || 1}px solid ${pageSettings.borderColor || "#e5e7eb"}`;
+    } else {
+      headerEl.style.position = "static";
+      headerEl.style.borderBottom = "none";
+    }
+  }, [html, pageSettings]);
 
   // When editor cursor moves, scroll preview to corresponding element (data-source-line)
   useEffect(() => {
@@ -103,11 +120,14 @@ export function MarkdownPreview() {
       <ScrollArea className="flex-1" ref={scrollAreaRef}>
         <div
           ref={previewRef}
-          className="markdown-preview p-8 cursor-pointer"
+          className="markdown-preview cursor-pointer"
           style={{
-            fontFamily: `'Inter', 'Vazirmatn', system-ui, sans-serif`,
+            fontFamily: pageSettings?.fontFamily ? `${pageSettings.fontFamily}, Inter, Vazirmatn, system-ui, sans-serif` : `'Inter', 'Vazirmatn', system-ui, sans-serif`,
             fontSize: settings.fontSize,
             lineHeight: settings.lineHeight,
+            background: pageSettings?.backgroundColor,
+            padding: pageSettings?.padding ?? 32,
+            boxSizing: 'border-box',
           }}
           dangerouslySetInnerHTML={{ __html: html }}
           data-testid="markdown-preview-content"

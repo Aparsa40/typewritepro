@@ -72,9 +72,7 @@ We may update these Terms occasionally. The updated version will be posted in `t
 
 For questions about these Terms, contact:
 
-- Email: legal@typewriterpro.example.com
-
-Please replace the contact email with a monitored address for your deployment.
+- Email: parssstore.ir@gmail.com
 
 ---
 

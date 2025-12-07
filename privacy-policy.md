@@ -9,7 +9,7 @@ If you are using TypeWriterPro on behalf of an organization, the organization is
 ## 1. Data Controller & Contact
 
 - Data Controller: TypeWriterPro Inc. (or the current owner of the repository)
-- Contact Email: privacy@typewriterpro.example.com
+- Contact Email: parssstore.ir@gmail.com
 
 Please replace the contact email above with an address that will be monitored by your organization. This address is used for privacy inquiries, data removal requests, and to comply with OAuth verification requests.
 
@@ -70,7 +70,7 @@ We do not share personal data with third parties except in the following situati
 
 ## 7. Your rights
 
-Depending on your jurisdiction, you may have rights regarding your personal data (access, correction, deletion, data portability, restriction of processing). To exercise these rights, contact privacy@typewriterpro.example.com. We will respond to requests in accordance with applicable law.
+Depending on your jurisdiction, you may have rights regarding your personal data (access, correction, deletion, data portability, restriction of processing). To exercise these rights, contact parssstore.ir@gmail.com . We will respond to requests in accordance with applicable law.
 
 ## 8. Security
 
@@ -78,7 +78,7 @@ We take reasonable organizational and technical measures to protect personal dat
 
 ## 9. Children
 
-The Service is not intended for children under 13 (or local minimum age). We do not knowingly collect information from children under the minimum age. If you believe we have collected data from a child, contact us at privacy@typewriterpro.example.com to request deletion.
+The Service is not intended for children under 13 (or local minimum age). We do not knowingly collect information from children under the minimum age. If you believe we have collected data from a child, contact us at parssstore.ir@gmail.com to request deletion.
 
 ## 10. Changes to this policy
 
@@ -88,14 +88,12 @@ We may update this Privacy Policy from time to time. We will post the updated po
 
 If you have questions or concerns about this Privacy Policy or would like to exercise your privacy rights, contact us at:
 
-privacy@typewriterpro.example.com
+parssstore.ir@gmail.com
 
 
 ---
 
 **Notes for Google OAuth Verification**
-
-When submitting for OAuth verification, use the publicly accessible URL for this file (e.g. the repository blob URL or a hosted page). For example (replace `Aparsa40` with your username and ensure the repo is public and the file is pushed):
 
 - Human-readable (Markdown rendered):
   `https://github.com/Aparsa40/typewritepro/blob/master/privacy-policy.md`

@@ -1,0 +1,92 @@
+{
+  "name": "TypeWriterPro",
+  "short_name": "TypeWriterPro",
+  "description": "A powerful markdown editor with live preview, workspaces, and document management",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["productivity"],
+  "screenshots": [
+    {
+      "src": "/icons/screenshot-1.png",
+      "sizes": "540x720",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/screenshot-2.png",
+      "sizes": "540x720",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Document",
+      "short_name": "New Doc",
+      "description": "Create a new blank document",
+      "url": "/?action=new",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Open File",
+      "short_name": "Open",
+      "description": "Open an existing document",
+      "url": "/?action=open",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": [".md", ".txt", ".markdown", "text/*"]
+        }
+      ]
+    }
+  }
+}

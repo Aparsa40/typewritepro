@@ -165,6 +165,82 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* Additional user themes */
+.theme-ocean {
+  --background: 204 30% 97%; /* very light blue */
+  --foreground: 210 15% 12%;
+  --primary: 200 80% 45%;
+  --sidebar-primary: 200 80% 45%;
+  --accent: 180 70% 85%;
+  --muted: 210 20% 95%;
+  --card: 0 0% 100%;
+}
+
+.theme-sepia {
+  --background: 35 20% 96%; /* off-white sepia */
+  --foreground: 30 20% 12%;
+  --primary: 30 40% 40%;
+  --sidebar-primary: 30 40% 40%;
+  --accent: 40 40% 92%;
+  --muted: 30 20% 90%;
+  --card: 0 0% 100%;
+}
+
+.theme-aurora {
+  --background: 260 30% 10%; /* dark bluish aurora */
+  --foreground: 0 0% 96%;
+  --primary: 280 80% 60%;
+  --sidebar-primary: 280 80% 60%;
+  --accent: 140 70% 50%;
+  --muted: 260 20% 12%;
+  --card: 260 30% 12%;
+}
+
+/* New dark themes */
+.theme-dark-blue {
+  --background: 220 20% 8%; /* deep dark blue */
+  --foreground: 0 0% 95%;
+  --primary: 220 90% 55%;
+  --sidebar-primary: 220 90% 55%;
+  --accent: 200 70% 85%;
+  --muted: 220 20% 15%;
+  --card: 220 25% 10%;
+  --border: 220 20% 18%;
+}
+
+.theme-midnight {
+  --background: 240 30% 5%; /* very dark, almost black */
+  --foreground: 0 0% 98%;
+  --primary: 240 100% 60%;
+  --sidebar-primary: 240 100% 60%;
+  --accent: 180 80% 70%;
+  --muted: 240 20% 12%;
+  --card: 240 30% 8%;
+  --border: 240 20% 15%;
+}
+
+.theme-deep-blue {
+  --background: 210 40% 6%; /* deep indigo-blue */
+  --foreground: 0 0% 96%;
+  --primary: 210 90% 50%;
+  --sidebar-primary: 210 90% 50%;
+  --accent: 190 80% 75%;
+  --muted: 210 30% 14%;
+  --card: 210 35% 9%;
+  --border: 210 30% 17%;
+}
+
+.theme-plum {
+  --background: 270 25% 10%; /* plum/purple-ish dark */
+  --foreground: 0 0% 95%;
+  --primary: 270 80% 55%;
+  --sidebar-primary: 270 80% 55%;
+  --accent: 280 70% 70%;
+  --muted: 270 20% 15%;
+  --card: 270 30% 11%;
+  --border: 270 25% 18%;
+}
+
 @layer base {
   * {
     @apply border-border;

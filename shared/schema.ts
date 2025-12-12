@@ -6,6 +6,7 @@ export const documentSchema = z.object({
   content: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  savePath: z.string().optional(),
 });
 
 export const insertDocumentSchema = documentSchema.omit({ id: true, createdAt: true, updatedAt: true });
@@ -26,7 +27,7 @@ export const editorSettingsSchema = z.object({
 
 export type EditorSettings = z.infer<typeof editorSettingsSchema>;
 
-export const themeSchema = z.enum(["light", "dark"]);
+export const themeSchema = z.enum(["light", "dark", "ocean", "sepia", "aurora", "dark-blue", "midnight", "deep-blue", "plum"]);
 export type Theme = z.infer<typeof themeSchema>;
 
 export const exportFormatSchema = z.enum(["pdf", "html", "markdown"]);

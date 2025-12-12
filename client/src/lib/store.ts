@@ -5,6 +5,7 @@ import { defaultSettings } from "@shared/schema";
 
 interface EditorState {
   currentDocument: Document | null;
+  defaultDocument: Document;
   content: string;
   theme: Theme;
   settings: EditorSettings;
@@ -13,6 +14,7 @@ interface EditorState {
   previewMode: "split" | "preview-full" | "editor-full";
   pageSettings: {
     backgroundColor: string;
+    backgroundImage?: string;
     fontFamily: string;
     fontSize: number;
     padding: number;
@@ -21,6 +23,24 @@ interface EditorState {
     borderWidth: number;
     headerLine: boolean;
   };
+  defaultDocumentPageSettings: {
+    backgroundColor: string;
+    backgroundImage?: string;
+    fontFamily: string;
+    fontSize: number;
+    padding: number;
+    borderStyle: "none" | "single" | "double";
+    borderColor: string;
+    borderWidth: number;
+    headerLine: boolean;
+  };
+  workspaces: Array<{
+    id: string;
+    name: string;
+    pageSettings: EditorState["pageSettings"];
+    pages: Document[];
+  }>;
+  currentWorkspaceId: string | null;
   showSettings: boolean;
   showTableBuilder: boolean;
   headings: Heading[];
@@ -43,6 +63,12 @@ interface EditorState {
   setScrollPosition: (position: "editor" | "preview", value: number) => void;
   setPreviewMode: (mode: "split" | "preview-full" | "editor-full") => void;
   setPageSettings: (settings: Partial<EditorState["pageSettings"]>) => void;
+  createWorkspace: (name: string) => string;
+  deleteWorkspace: (id: string) => boolean;
+  setCurrentWorkspace: (id: string | null) => void;
+  createPageInCurrentWorkspace: (title?: string, savePath?: string) => Document | null;
+  deletePageFromWorkspace: (workspaceId: string, pageId: string) => boolean;
+  setWorkspacePageSettings: (workspaceId: string, settings: Partial<EditorState["pageSettings"]>) => void;
   setWordCount: (count: number) => void;
   setCharCount: (count: number) => void;
   setDetectedDirection: (direction: "ltr" | "rtl" | "mixed") => void;
@@ -50,6 +76,8 @@ interface EditorState {
   openDocument: (doc: Document) => void;
   saveDocument: () => Document | null;
   setIsModified: (modified: boolean) => void;
+  setDefaultDocumentPageSettings: (settings: Partial<EditorState["defaultDocumentPageSettings"]>) => void;
+  switchToDefaultDocument: () => void;
 }
 
 const sampleMarkdown = `# Welcome to TypeWriterPro
@@ -93,26 +121,42 @@ function greet(name) {
 Start typing in the editor on the left, and see the preview update in real-time on the right!
 `;
 
+const defaultPageSettings = {
+  backgroundColor: "#ffffff",
+  backgroundImage: undefined,
+  fontFamily: "Inter",
+  fontSize: 16,
+  padding: 32,
+  borderStyle: "none" as const,
+  borderColor: "#e5e7eb",
+  borderWidth: 1,
+  headerLine: true,
+};
+
+const defaultDocumentInit: Document = {
+  id: "default-document",
+  title: "TypeWriterPro",
+  content: sampleMarkdown,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
 export const useEditorStore = create<EditorState>()(
   persist(
     (set, get) => ({
-      currentDocument: null,
+      currentDocument: defaultDocumentInit,
+      defaultDocument: defaultDocumentInit,
       content: sampleMarkdown,
       theme: "light",
       settings: defaultSettings,
       showSidebar: true,
       showPreview: true,
       previewMode: "split",
-      pageSettings: {
-        backgroundColor: "#ffffff",
-        fontFamily: "Inter",
-        fontSize: 16,
-        padding: 32,
-        borderStyle: "none",
-        borderColor: "#e5e7eb",
-        borderWidth: 1,
-        headerLine: true,
-      },
+      pageSettings: { ...defaultPageSettings },
+      defaultDocumentPageSettings: { ...defaultPageSettings },
+      // No user-created workspaces by default. The app starts with a global/default document/page.
+      workspaces: [],
+      currentWorkspaceId: null,
       showSettings: false,
       showTableBuilder: false,
       headings: [],
@@ -127,11 +171,18 @@ export const useEditorStore = create<EditorState>()(
       
       setTheme: (theme) => {
         set({ theme });
-        if (theme === "dark") {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
+        // Clear existing theme classes
+        const classes = ["dark", "theme-ocean", "theme-sepia", "theme-aurora", "theme-dark-blue", "theme-midnight", "theme-deep-blue", "theme-plum"];
+        classes.forEach((c) => document.documentElement.classList.remove(c));
+        // Apply new theme class if needed
+        if (theme === "dark") document.documentElement.classList.add("dark");
+        if (theme === "ocean") document.documentElement.classList.add("theme-ocean");
+        if (theme === "sepia") document.documentElement.classList.add("theme-sepia");
+        if (theme === "aurora") document.documentElement.classList.add("theme-aurora");
+        if (theme === "dark-blue") document.documentElement.classList.add("theme-dark-blue");
+        if (theme === "midnight") document.documentElement.classList.add("theme-midnight");
+        if (theme === "deep-blue") document.documentElement.classList.add("theme-deep-blue");
+        if (theme === "plum") document.documentElement.classList.add("theme-plum");
       },
       
       setSettings: (newSettings) =>
@@ -152,7 +203,82 @@ export const useEditorStore = create<EditorState>()(
         })),
       setPreviewMode: (mode) => set({ previewMode: mode }),
       setPageSettings: (newSettings) =>
-        set((state) => ({ pageSettings: { ...state.pageSettings, ...newSettings } })),
+        set((state) => {
+          const updated = { ...state.pageSettings, ...newSettings };
+          // If currently in default document, also update default document settings
+          const isDefaultDoc = state.currentDocument?.id === state.defaultDocument.id;
+          return {
+            pageSettings: updated,
+            ...(isDefaultDoc ? { defaultDocumentPageSettings: updated } : {}),
+          };
+        }),
+      createWorkspace: (name) => {
+        const id = crypto.randomUUID?.() || String(Date.now());
+        const ws = {
+          id,
+          name: name || `Workspace ${id}`,
+          pageSettings: { ...get().pageSettings },
+          pages: [] as Document[],
+        };
+        set((state) => ({ workspaces: [...state.workspaces, ws], currentWorkspaceId: id }));
+        return id;
+      },
+        deleteWorkspace: (id) => {
+          const state = get();
+          const exists = state.workspaces.some((w) => w.id === id);
+          if (!exists) return false;
+          const newWorkspaces = state.workspaces.filter((w) => w.id !== id);
+          const newCurrent = state.currentWorkspaceId === id ? (newWorkspaces[0]?.id || null) : state.currentWorkspaceId;
+          set({ workspaces: newWorkspaces, currentWorkspaceId: newCurrent });
+          return true;
+        },
+      setCurrentWorkspace: (id) => set(() => ({ currentWorkspaceId: id })),
+      createPageInCurrentWorkspace: (title, savePath) => {
+        const state = get();
+        const wsId = state.currentWorkspaceId;
+        if (!wsId) return null;
+        const wsIndex = state.workspaces.findIndex((w) => w.id === wsId);
+        if (wsIndex === -1) return null;
+        const now = new Date().toISOString();
+        const doc: Document = {
+          id: crypto.randomUUID?.() || String(Date.now()),
+          title: title || "Untitled Page",
+          content: "",
+          savePath: savePath,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const newWorkspaces = [...state.workspaces];
+        newWorkspaces[wsIndex] = { ...newWorkspaces[wsIndex], pages: [...newWorkspaces[wsIndex].pages, doc] };
+        set({ workspaces: newWorkspaces });
+        return doc;
+      },
+      deletePageFromWorkspace: (workspaceId, pageId) => {
+        const state = get();
+        const wsIndex = state.workspaces.findIndex((w) => w.id === workspaceId);
+        if (wsIndex === -1) return false;
+        const ws = state.workspaces[wsIndex];
+        const exists = ws.pages.some((p) => p.id === pageId);
+        if (!exists) return false;
+        const newPages = ws.pages.filter((p) => p.id !== pageId);
+        const newWorkspaces = [...state.workspaces];
+        newWorkspaces[wsIndex] = { ...ws, pages: newPages };
+        // If the deleted page is currently open, switch back to default document
+        const isCurrent = state.currentDocument?.id === pageId;
+        set({ workspaces: newWorkspaces, currentWorkspaceId: state.currentWorkspaceId === workspaceId && newPages.length === 0 ? null : state.currentWorkspaceId });
+        if (isCurrent) {
+          // switch to default document
+          set({ currentDocument: state.defaultDocument, content: state.defaultDocument.content, currentWorkspaceId: null, pageSettings: { ...state.defaultDocumentPageSettings } });
+        }
+        return true;
+      },
+      setWorkspacePageSettings: (workspaceId, newSettings) => {
+        set((state) => ({
+          workspaces: state.workspaces.map((w) =>
+            w.id === workspaceId ? { ...w, pageSettings: { ...w.pageSettings, ...newSettings } } : w
+          ),
+        }));
+      },
       setWordCount: (count) => set({ wordCount: count }),
       setCharCount: (count) => set({ charCount: count }),
       setDetectedDirection: (direction) => set({ detectedDirection: direction }),
@@ -171,7 +297,19 @@ export const useEditorStore = create<EditorState>()(
       },
       
       openDocument: (doc) => {
-        set({ currentDocument: doc, content: doc.content, isModified: false });
+        // When opening a document, apply its specific page settings (from workspace or default)
+        const state = get();
+        const ws = state.workspaces.find((w) => w.pages.some((p) => p.id === doc.id));
+        if (ws) {
+          // Document belongs to a workspace: apply workspace's page settings
+          set({ currentDocument: doc, content: doc.content, isModified: false, currentWorkspaceId: ws.id, pageSettings: { ...ws.pageSettings } });
+        } else if (doc.id === state.defaultDocument.id) {
+          // Opening the default document: apply default page settings
+          set({ currentDocument: doc, content: doc.content, isModified: false, currentWorkspaceId: null, pageSettings: { ...state.defaultDocumentPageSettings } });
+        } else {
+          // Unknown document: just load it without changing page settings
+          set({ currentDocument: doc, content: doc.content, isModified: false, currentWorkspaceId: null });
+        }
       },
       
       saveDocument: () => {
@@ -201,6 +339,24 @@ export const useEditorStore = create<EditorState>()(
       },
       
       setIsModified: (modified) => set({ isModified: modified }),
+      
+      setDefaultDocumentPageSettings: (newSettings) =>
+        set((state) => ({
+          defaultDocumentPageSettings: { ...state.defaultDocumentPageSettings, ...newSettings },
+          // If currently viewing the default document, also update the active pageSettings
+          ...(state.currentDocument?.id === state.defaultDocument.id ? { pageSettings: { ...state.pageSettings, ...newSettings } } : {}),
+        })),
+      
+      switchToDefaultDocument: () => {
+        const state = get();
+        set({
+          currentDocument: state.defaultDocument,
+          content: state.defaultDocument.content,
+          currentWorkspaceId: null,
+          pageSettings: { ...state.defaultDocumentPageSettings },
+          isModified: false,
+        });
+      },
     }),
     {
       name: "typewriterpro-storage",
@@ -210,6 +366,10 @@ export const useEditorStore = create<EditorState>()(
         showSidebar: state.showSidebar,
         showPreview: state.showPreview,
         content: state.content,
+        defaultDocument: state.defaultDocument,
+        defaultDocumentPageSettings: state.defaultDocumentPageSettings,
+        workspaces: state.workspaces,
+        currentWorkspaceId: state.currentWorkspaceId,
       }),
     }
   )

@@ -2,9 +2,10 @@ import { useMemo, useEffect, useRef, useCallback } from "react";
 import { useEditorStore } from "@/lib/store";
 import { renderMarkdown, getMarkdownStyles } from "@/lib/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ImageEditorOverlay } from "./ImageEditorOverlay";
 
 export function MarkdownPreview() {
-  const { content, theme, settings, scrollPosition, setScrollPosition, cursorPosition, pageSettings } = useEditorStore();
+  const { content, theme, settings, scrollPosition, setScrollPosition, cursorPosition, pageSettings, currentWorkspaceId, setContent } = useEditorStore();
   const previewRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const isSyncingFromEditor = useRef(false);
@@ -14,7 +15,7 @@ export function MarkdownPreview() {
   }, [content, settings.autoDirection]);
 
   const styles = useMemo(() => {
-    return getMarkdownStyles(theme);
+    return getMarkdownStyles();
   }, [theme]);
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export function MarkdownPreview() {
   useEffect(() => {
     const line = cursorPosition?.line ?? 1;
     if (!previewRef.current) return;
-    const el = previewRef.current.querySelector(`[data-source-line=\"${line}\"]`) as HTMLElement | null;
+    const el = previewRef.current.querySelector(`[data-source-line="${line}"]`) as HTMLElement | null;
     if (el) {
       isSyncingFromEditor.current = true;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -115,7 +116,19 @@ export function MarkdownPreview() {
   }, []);
 
   return (
-    <div className="h-full w-full flex flex-col" data-testid="markdown-preview-container">
+    <div
+      className="h-full w-full flex flex-col"
+      data-testid="markdown-preview-container"
+      style={{
+        position: 'relative',
+        // Apply workspace background to the full preview container so it covers the whole page area
+        background: currentWorkspaceId ? pageSettings?.backgroundColor : undefined,
+        backgroundImage: currentWorkspaceId && pageSettings?.backgroundImage ? `url(${pageSettings.backgroundImage})` : undefined,
+        backgroundSize: currentWorkspaceId && pageSettings?.backgroundImage ? 'cover' : undefined,
+        backgroundRepeat: currentWorkspaceId && pageSettings?.backgroundImage ? 'no-repeat' : undefined,
+        backgroundPosition: currentWorkspaceId && pageSettings?.backgroundImage ? 'center' : undefined,
+      }}
+    >
       <style>{styles}</style>
       <ScrollArea className="flex-1" ref={scrollAreaRef}>
         <div
@@ -123,17 +136,28 @@ export function MarkdownPreview() {
           className="markdown-preview cursor-pointer"
           style={{
             fontFamily: pageSettings?.fontFamily ? `${pageSettings.fontFamily}, Inter, Vazirmatn, system-ui, sans-serif` : `'Inter', 'Vazirmatn', system-ui, sans-serif`,
-            fontSize: settings.fontSize,
+            fontSize: pageSettings?.fontSize ?? settings.fontSize,
             lineHeight: settings.lineHeight,
-            background: pageSettings?.backgroundColor,
+            // Keep inner content transparent so container background shows through
+            background: 'transparent',
+            backgroundImage: undefined,
             padding: pageSettings?.padding ?? 32,
             boxSizing: 'border-box',
+            // Apply border according to page settings so preview/print match editor expectations (for workspace pages)
+            border: currentWorkspaceId && pageSettings?.borderStyle && pageSettings?.borderStyle !== 'none' ? `${pageSettings.borderWidth || 1}px ${pageSettings.borderStyle === 'double' ? 'double' : 'solid'} ${pageSettings.borderColor || '#e5e7eb'}` : undefined,
+            borderRadius: currentWorkspaceId && pageSettings?.borderStyle && pageSettings?.borderStyle !== 'none' ? 6 : undefined,
+            overflowX: 'auto',
+            width: '100%',
+            display: 'block',
+            minHeight: '100%',
           }}
           dangerouslySetInnerHTML={{ __html: html }}
           data-testid="markdown-preview-content"
           onClick={handlePreviewClick}
         />
       </ScrollArea>
+      {/* Overlay for interactive image editing */}
+      <ImageEditorOverlay previewRef={previewRef} content={content} setContent={setContent} />
     </div>
   );
 }

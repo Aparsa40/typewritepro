@@ -184,7 +184,7 @@ export function MonacoEditor() {
         value={content}
         onChange={handleChange}
         onMount={handleEditorDidMount}
-        theme={theme === "dark" ? "typewriter-dark" : "typewriter-light"}
+        theme={(["dark","dark-blue","midnight","deep-blue","plum","aurora"].includes(theme) ? "typewriter-dark" : "typewriter-light")}
         options={{
           fontFamily: `'${settings.fontFamily}', 'Vazirmatn', 'JetBrains Mono', monospace`,
           fontSize: settings.fontSize,

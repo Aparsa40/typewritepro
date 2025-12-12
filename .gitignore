@@ -42,3 +42,7 @@ server/public/
 .local/
 vite.config.ts.*
 .replit
+
+#vscode workspace settings
+TypeWriterPro.code workspace
+workspace.code-workspace

@@ -51,7 +51,8 @@ import { CodeDialog } from "./dialogs/CodeDialog";
 import { ParagraphDialog } from "./dialogs/ParagraphDialog";
 import { HeaderTemplateDialog } from "./dialogs/HeaderTemplateDialog";
 import { BorderDialog } from "./dialogs/BorderDialog";
-import { PageSettingsDialog } from "./dialogs/PageSettingsDialog";
+import { WorkspaceDialog } from "./dialogs/WorkspaceDialog";
+import { ImageInsertDialog } from "./dialogs/ImageInsertDialog";
 
 export function MenuBar() {
   const {
@@ -69,9 +70,14 @@ export function MenuBar() {
     toggleTableBuilder,
     newDocument,
     saveDocument,
+    createPageInCurrentWorkspace,
   } = useEditorStore();
 
   const { toast } = useToast();
+  const [imageInsertOpen, setImageInsertOpen] = useState(false);
+  const [imageInsertUrl, setImageInsertUrl] = useState("");
+  const [imageInsertFileName, setImageInsertFileName] = useState("");
+
 
   const handleNew = useCallback(() => {
     newDocument();
@@ -108,17 +114,77 @@ export function MenuBar() {
   }, [saveDocument, toast]);
 
   const handleSaveAs = useCallback(() => {
-    const blob = new Blob([content], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "document.md";
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({
-      title: "File Downloaded",
-      description: "Markdown file has been downloaded.",
-    });
+    (async () => {
+      // Ask user which format to save as
+      const fmt = window.prompt('Save as format (md, txt, html, pdf):', 'md') || 'md';
+      const format = (fmt || 'md').toLowerCase();
+      if (!['md','txt','html','pdf'].includes(format)) {
+        toast({ title: 'Invalid format', description: 'Supported: md, txt, html, pdf', variant: 'destructive' });
+        return;
+      }
+
+      // Determine base filename from document title
+      const state = useEditorStore.getState();
+      const base = (state.currentDocument?.title || 'document').replace(/[^a-z0-9\-_.\s]/gi, '_').trim();
+      const filename = `${base}.${format}`;
+
+      try {
+        if ((window as any).showDirectoryPicker) {
+          // Let user pick a folder, then write file with fixed name (prevent renaming)
+          // This matches the requested behaviour: user chooses location and format but can't change filename
+          // Note: showDirectoryPicker is available in Chromium-based browsers
+          // @ts-ignore
+          const dir = await (window as any).showDirectoryPicker();
+          const handle = await dir.getFileHandle(filename, { create: true });
+          const writable = await handle.createWritable();
+
+          if (format === 'md' || format === 'txt') {
+            await writable.write(content);
+          } else if (format === 'html') {
+            const html = renderMarkdown(content, true);
+            await writable.write(html);
+          } else if (format === 'pdf') {
+            // Generate PDF blob via exportToPDF which saves via jsPDF; fall back to writing generated PDF blob
+            const html = renderMarkdown(content, true);
+            // exportToPDF saves directly via jsPDF.save, but we want a Blob to write to handle
+            // Use html2canvas + jsPDF approach to create blob
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            tempDiv.style.position = 'fixed';
+            tempDiv.style.left = '-9999px';
+            document.body.appendChild(tempDiv);
+            const canvas = await html2canvas(tempDiv, { scale: 2, useCORS: true });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const imgWidth = 210;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+            const blob = pdf.output('blob');
+            await writable.write(blob);
+            document.body.removeChild(tempDiv);
+          }
+
+          await writable.close();
+          toast({ title: 'Saved', description: `Saved ${filename}` });
+          return;
+        }
+
+        // Fallback: trigger browser download (user may have to choose filename in browser settings)
+        if (format === 'html') {
+          const html = renderMarkdown(content, true);
+          exportToHTML(content, html, filename, { title: state.currentDocument?.title || 'Document' });
+        } else if (format === 'pdf') {
+          const html = renderMarkdown(content, true);
+          await exportToPDF(html, filename, { title: state.currentDocument?.title || 'Document' });
+        } else {
+          exportToMarkdown(content, filename);
+        }
+        toast({ title: 'File Downloaded', description: `${filename} has been downloaded.` });
+      } catch (err) {
+        console.error('Save As error', err);
+        toast({ title: 'Save failed', description: 'Could not save file. Check browser permissions.', variant: 'destructive' });
+      }
+    })();
   }, [content, toast]);
 
   const handleExportMarkdown = useCallback(() => {
@@ -440,7 +506,7 @@ export function MenuBar() {
               {previewMode === 'preview-full' ? 'Exit Fullscreen Preview' : 'Enter Fullscreen Preview'}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as "light" | "dark")}>
+            <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as any)}>
               <DropdownMenuRadioItem value="light" data-testid="menu-theme-light">
                 <Sun className="mr-2 h-4 w-4" />
                 Light Theme
@@ -448,6 +514,29 @@ export function MenuBar() {
               <DropdownMenuRadioItem value="dark" data-testid="menu-theme-dark">
                 <Moon className="mr-2 h-4 w-4" />
                 Dark Theme
+              </DropdownMenuRadioItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioItem value="ocean" data-testid="menu-theme-ocean">
+                Ocean Theme
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="sepia" data-testid="menu-theme-sepia">
+                Sepia Theme
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="aurora" data-testid="menu-theme-aurora">
+                Aurora Theme
+              </DropdownMenuRadioItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioItem value="dark-blue" data-testid="menu-theme-dark-blue">
+                Dark Blue Theme
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="midnight" data-testid="menu-theme-midnight">
+                Midnight Theme
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="deep-blue" data-testid="menu-theme-deep-blue">
+                Deep Blue Theme
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="plum" data-testid="menu-theme-plum">
+                Plum Theme
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
@@ -471,6 +560,18 @@ export function MenuBar() {
             <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
+                <FileText className="mr-2 h-4 w-4" />
+                Workspace
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <WorkspaceDialog />
+                <div className="px-2">
+                  <Button variant="ghost" size="sm" onClick={() => createPageInCurrentWorkspace("New Page")} className="w-full text-xs">Create Page in Workspace</Button>
+                </div>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
                 <FileCode className="mr-2 h-4 w-4" />
                 Markdown Tools
               </DropdownMenuSubTrigger>
@@ -483,9 +584,19 @@ export function MenuBar() {
                 <TableDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
                 <CodeDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
                 <ParagraphDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
-                <PageSettingsDialog />
                 <div className="px-2">
                   <Button variant="ghost" size="sm" onClick={openAsLiveHTML} className="w-full text-xs">Render as Live HTML/CSS/JS</Button>
+                </div>
+                <div className="px-2">
+                  <input id="menu-insert-image-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (!file) return;
+                    const url = URL.createObjectURL(file);
+                    setImageInsertUrl(url);
+                    setImageInsertFileName(file.name);
+                    setImageInsertOpen(true);
+                  }} />
+                  <Button variant="ghost" size="sm" onClick={() => document.getElementById('menu-insert-image-input')?.click()} className="w-full text-xs">Insert Image</Button>
                 </div>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
@@ -516,6 +627,23 @@ export function MenuBar() {
           <Settings className="h-4 w-4" />
         </Button>
       </div>
+
+      <ImageInsertDialog 
+        open={imageInsertOpen} 
+        onClose={() => {
+          setImageInsertOpen(false);
+          setImageInsertUrl("");
+          setImageInsertFileName("");
+        }}
+        imageUrl={imageInsertUrl}
+        fileName={imageInsertFileName}
+        onInsert={(markdown) => {
+          setContent(content + "\n\n" + markdown);
+          setImageInsertOpen(false);
+          setImageInsertUrl("");
+          setImageInsertFileName("");
+        }}
+      />
     </header>
   );
 }

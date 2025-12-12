@@ -7,6 +7,7 @@ import { TableBuilder } from "@/components/editor/TableBuilder";
 import { DocumentOutline } from "@/components/editor/DocumentOutline";
 import { StatusBar } from "@/components/editor/StatusBar";
 import { useEditorStore } from "@/lib/store";
+import { IntroTour } from "@/components/editor/IntroTour";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -17,11 +18,17 @@ export default function EditorPage() {
   const { theme, showPreview, showSidebar, previewMode } = useEditorStore();
 
   useEffect(() => {
-    if (theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    // Remove any previous theme classes and apply the active theme.
+    const classes = ["dark", "theme-ocean", "theme-sepia", "theme-aurora", "theme-dark-blue", "theme-midnight", "theme-deep-blue", "theme-plum"];
+    classes.forEach((c) => document.documentElement.classList.remove(c));
+    if (theme === "dark") document.documentElement.classList.add("dark");
+    if (theme === "ocean") document.documentElement.classList.add("theme-ocean");
+    if (theme === "sepia") document.documentElement.classList.add("theme-sepia");
+    if (theme === "aurora") document.documentElement.classList.add("theme-aurora");
+    if (theme === "dark-blue") document.documentElement.classList.add("theme-dark-blue");
+    if (theme === "midnight") document.documentElement.classList.add("theme-midnight");
+    if (theme === "deep-blue") document.documentElement.classList.add("theme-deep-blue");
+    if (theme === "plum") document.documentElement.classList.add("theme-plum");
   }, [theme]);
 
   useEffect(() => {
@@ -63,6 +70,7 @@ export default function EditorPage() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background" data-testid="editor-page">
       <MenuBar />
+      <IntroTour />
       
       <div className="flex-1 flex overflow-hidden">
         <DocumentOutline />

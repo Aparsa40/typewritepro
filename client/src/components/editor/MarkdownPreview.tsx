@@ -49,7 +49,14 @@ export function MarkdownPreview() {
   useEffect(() => {
     const line = cursorPosition?.line ?? 1;
     if (!previewRef.current) return;
-    const el = previewRef.current.querySelector(`[data-source-line="${line}"]`) as HTMLElement | null;
+    // Find the exact anchor, or fallback to the nearest previous line that has an anchor
+    let el = previewRef.current.querySelector(`[data-source-line="${line}"]`) as HTMLElement | null;
+    if (!el) {
+      for (let i = line - 1; i >= 1; i--) {
+        el = previewRef.current.querySelector(`[data-source-line="${i}"]`) as HTMLElement | null;
+        if (el) break;
+      }
+    }
     if (el) {
       isSyncingFromEditor.current = true;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -137,7 +144,8 @@ export function MarkdownPreview() {
           style={{
             fontFamily: pageSettings?.fontFamily ? `${pageSettings.fontFamily}, Inter, Vazirmatn, system-ui, sans-serif` : `'Inter', 'Vazirmatn', system-ui, sans-serif`,
             fontSize: pageSettings?.fontSize ?? settings.fontSize,
-            lineHeight: settings.lineHeight,
+            // pageSettings.lineSpacing is a multiplier like 1.6 => set CSS line-height accordingly
+            lineHeight: pageSettings?.lineSpacing ?? settings.lineHeight,
             // Keep inner content transparent so container background shows through
             background: 'transparent',
             backgroundImage: undefined,

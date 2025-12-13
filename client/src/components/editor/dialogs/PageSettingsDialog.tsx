@@ -12,6 +12,7 @@ export function PageSettingsDialog() {
   const [bg, setBg] = useState(pageSettings.backgroundColor || "#ffffff");
   const [font, setFont] = useState(pageSettings.fontFamily || "Inter");
   const [padding, setPadding] = useState(pageSettings.padding || 32);
+  const [lineSpacing, setLineSpacing] = useState<number>(pageSettings.lineSpacing || 1.7);
   const [borderStyle, setBorderStyle] = useState<"none" | "single" | "double">(pageSettings.borderStyle || "none");
   const [borderColor, setBorderColor] = useState(pageSettings.borderColor || "#e5e7eb");
   const [borderWidth, setBorderWidth] = useState(pageSettings.borderWidth || 1);
@@ -22,6 +23,7 @@ export function PageSettingsDialog() {
       backgroundColor: bg,
       fontFamily: font,
       padding: Number(padding),
+      lineSpacing: Number(lineSpacing),
       borderStyle: borderStyle as any,
       borderColor,
       borderWidth: Number(borderWidth),
@@ -61,6 +63,11 @@ export function PageSettingsDialog() {
           <div>
             <Label>Page Padding (px)</Label>
             <Input value={String(padding)} onChange={(e) => setPadding(Number(e.target.value))} />
+          </div>
+
+          <div>
+            <Label>Line Spacing</Label>
+            <Input type="number" step="0.1" min="1" max="3" value={String(lineSpacing)} onChange={(e) => setLineSpacing(Number(e.target.value))} />
           </div>
 
           <div className="grid grid-cols-3 gap-2 items-end">

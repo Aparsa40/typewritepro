@@ -93,7 +93,21 @@ export function renderMarkdown(content: string, autoDirection: boolean = true): 
     let counter = 0;
     const mdImageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
 
-    const preprocessed = content.replace(mdImageRegex, (match) => {
+    // Insert invisible anchors for each source line (used to map cursor positions)
+    // Avoid inserting anchors inside fenced code blocks so we don't break code rendering
+    const lines = content.split('\n');
+    let inFence = false;
+    const withAnchors = lines
+      .map((ln, idx) => {
+        const fenceMatch = ln.match(/^\s*```/);
+        if (fenceMatch) inFence = !inFence;
+        if (inFence) return ln; // do not inject inside code fences
+        // anchor uses an HTML element that will be present in the DOM and allows for exact mapping
+        return `<span data-source-line="${idx + 1}" class="md-line-anchor" aria-hidden="true"></span>${ln}`;
+      })
+      .join('\n');
+
+    const preprocessed = withAnchors.replace(mdImageRegex, (match) => {
       counter += 1;
       const id = `img-${counter}`;
       const url = extractUrl(match).replace(/^<|>$/g, "");
@@ -200,6 +214,7 @@ export function getMarkdownStyles(_theme?: string): string {
     .markdown-preview tr:nth-child(even) { background: rgba(0,0,0,0.01); }
 
     .markdown-preview img { max-width: 100%; height: auto; border-radius: 8px; }
+    .md-line-anchor { display: block; height: 0; line-height: 0; visibility: hidden; }
     .markdown-preview hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 2em 0; }
     .markdown-preview strong { font-weight: 600; }
     .markdown-preview em { font-style: italic; }

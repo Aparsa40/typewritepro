@@ -26,10 +26,17 @@ export function MonacoEditor() {
     // Add paste event listener to support context-menu Paste
     const editorDom = editor.getDomNode();
     if (editorDom) {
-      const handlePaste = async (e: ClipboardEvent) => {
+      // Handle paste events from both keyboard and context menu reliably by
+      // watching for paste events on the document in the capture phase and
+      // ensuring the active element is inside the editor.
+      const handlePaste = (e: ClipboardEvent) => {
+        // Only intercept paste events that are targeted to the editor
+        const activeEl = document.activeElement as Node | null;
+        if (!activeEl || !editorDom.contains(activeEl)) return;
         e.preventDefault();
         try {
-          const text = await navigator.clipboard.readText();
+          // Prefer the clipboardData from the event (works with context menu paste)
+          const text = e.clipboardData?.getData("text/plain") || "";
           if (text && editor) {
             const selection = editor.getSelection();
             if (selection) {
@@ -43,10 +50,30 @@ export function MonacoEditor() {
             }
           }
         } catch (err) {
-          console.warn("Clipboard paste failed:", err);
+          // Fallback: attempt to read via deprecated clipboard API if available
+          (async () => {
+            try {
+              const cbText = await navigator.clipboard.readText();
+              if (cbText && editor) {
+                const selection = editor.getSelection();
+                if (selection) {
+                  editor.executeEdits("paste-event", [
+                    { range: selection, text: cbText, forceMoveMarkers: true },
+                  ]);
+                }
+              }
+            } catch (err2) {
+              console.warn("Clipboard paste failed:", err2);
+            }
+          })();
         }
       };
-      editorDom.addEventListener('paste', handlePaste);
+      // Capture phase ensures we receive paste events even if Monaco stops propagation
+      document.addEventListener('paste', handlePaste, true);
+      // Cleanup on unmount
+      const clear = () => document.removeEventListener('paste', handlePaste, true);
+      // Attach to the editor so we can remove when it's disposed
+      editor.onDidDispose(clear);
     }
 
     // Set editor container to dir='auto' for per-paragraph RTL/LTR handling
@@ -104,6 +131,13 @@ export function MonacoEditor() {
     editor.onDidChangeCursorPosition((e) => {
       setCursorPosition(e.position.lineNumber, e.position.column);
     });
+
+    // On context menu open, ensure the editor is focused so subsequent context-menu 'Paste' events target it
+    if ((editor as any).onContextMenu) {
+      editor.onContextMenu(() => {
+        try { editor.focus(); } catch (err) { /* ignore */ }
+      });
+    }
 
     const isSyncingFromPreview = { current: false };
     editor.onDidScrollChange(() => {

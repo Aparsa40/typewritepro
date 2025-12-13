@@ -18,6 +18,7 @@ interface EditorState {
     fontFamily: string;
     fontSize: number;
     padding: number;
+    lineSpacing: number;
     borderStyle: "none" | "single" | "double";
     borderColor: string;
     borderWidth: number;
@@ -126,6 +127,7 @@ const defaultPageSettings = {
   backgroundImage: undefined,
   fontFamily: "Inter",
   fontSize: 16,
+  lineSpacing: 1.7,
   padding: 32,
   borderStyle: "none" as const,
   borderColor: "#e5e7eb",

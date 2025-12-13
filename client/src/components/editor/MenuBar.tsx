@@ -71,6 +71,8 @@ export function MenuBar() {
     newDocument,
     saveDocument,
     createPageInCurrentWorkspace,
+    settings,
+    pageSettings,
   } = useEditorStore();
 
   const { toast } = useToast();
@@ -142,14 +144,19 @@ export function MenuBar() {
             await writable.write(content);
           } else if (format === 'html') {
             const html = renderMarkdown(content, true);
-            await writable.write(html);
+            const headings2 = useEditorStore.getState().headings;
+            const toc2 = headings2.length ? `<nav class="toc"><h2>Table of Contents</h2><ul>${headings2.map(h=>`<li class="toc-level-${h.level}"><a href="#${h.id}">${h.text}</a></li>`).join('')}</ul></nav>` : '';
+            await writable.write(toc2 + html);
           } else if (format === 'pdf') {
             // Generate PDF blob via exportToPDF which saves via jsPDF; fall back to writing generated PDF blob
             const html = renderMarkdown(content, true);
+            const headings2 = useEditorStore.getState().headings;
+            const toc2 = headings2.length ? `<nav class="toc"><h2>Table of Contents</h2><ul>${headings2.map(h=>`<li class="toc-level-${h.level}"><a href="#${h.id}">${h.text}</a></li>`).join('')}</ul></nav>` : '';
+            const htmlWithToc = toc2 + html;
             // exportToPDF saves directly via jsPDF.save, but we want a Blob to write to handle
             // Use html2canvas + jsPDF approach to create blob
             const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html;
+            tempDiv.innerHTML = htmlWithToc;
             tempDiv.style.position = 'fixed';
             tempDiv.style.left = '-9999px';
             document.body.appendChild(tempDiv);
@@ -206,9 +213,15 @@ export function MenuBar() {
   const handleExportHTML = useCallback(() => {
     try {
       const html = renderMarkdown(content, true);
-      exportToHTML(content, html, "document.html", {
+      // Include a table of contents at the top
+      const headings = useEditorStore.getState().headings;
+      const toc = headings.length ? `<nav class="toc"><h2>Table of Contents</h2><ul>${headings.map(h=>`<li class="toc-level-${h.level}"><a href="#${h.id}">${h.text}</a></li>`).join('')}</ul></nav>` : '';
+      const htmlWithToc = toc + html;
+      exportToHTML(content, htmlWithToc, "document.html", {
         title: "TypeWriterPro Document",
         date: new Date(),
+        lineHeight: pageSettings?.lineSpacing ?? settings.lineHeight,
+        fontFamily: pageSettings?.fontFamily ?? settings.fontFamily,
       });
       toast({
         title: "Export Complete",
@@ -231,9 +244,15 @@ export function MenuBar() {
 
     try {
       const html = renderMarkdown(content, true);
-      await exportToPDF(html, "document.pdf", {
+      // Prepend TOC to the HTML used for PDF generation
+      const headings = useEditorStore.getState().headings;
+      const toc = headings.length ? `<nav class="toc"><h2>Table of Contents</h2><ul>${headings.map(h=>`<li class="toc-level-${h.level}"><a href="#${h.id}">${h.text}</a></li>`).join('')}</ul></nav>` : '';
+      const htmlWithToc = toc + html;
+      await exportToPDF(htmlWithToc, "document.pdf", {
         title: "TypeWriterPro Document",
         date: new Date(),
+        lineHeight: pageSettings?.lineSpacing ?? settings.lineHeight,
+        fontFamily: pageSettings?.fontFamily ?? settings.fontFamily,
       });
       toast({
         title: "Export Complete",
@@ -347,13 +366,25 @@ export function MenuBar() {
       } else if (format === 'html') {
         name = 'document.html';
         mimeType = 'text/html';
-        contentToUpload = renderMarkdown(content, true);
+        {
+          const html = renderMarkdown(content, true);
+          const headings2 = useEditorStore.getState().headings;
+          const toc2 = headings2.length ? `<nav class="toc"><h2>Table of Contents</h2><ul>${headings2.map(h=>`<li class="toc-level-${h.level}"><a href="#${h.id}">${h.text}</a></li>`).join('')}</ul></nav>` : '';
+          const styleTag = `<style>body { line-height: ${pageSettings?.lineSpacing ?? settings.lineHeight}; font-family: ${pageSettings?.fontFamily ?? settings.fontFamily}; }</style>`;
+          contentToUpload = `${styleTag}${toc2}${html}`;
+        }
       } else {
         // pdf: generate as Blob via exportToPDF flow but exportToPDF returns file via save
         // Instead, create HTML and upload as pdf by asking server to convert is complex; fallback: upload HTML with .pdf name (not perfect)
         name = 'document.pdf';
         mimeType = 'application/pdf';
-        contentToUpload = renderMarkdown(content, true);
+        {
+          const html = renderMarkdown(content, true);
+          const headings2 = useEditorStore.getState().headings;
+          const toc2 = headings2.length ? `<nav class="toc"><h2>Table of Contents</h2><ul>${headings2.map(h=>`<li class="toc-level-${h.level}"><a href="#${h.id}">${h.text}</a></li>`).join('')}</ul></nav>` : '';
+          const styleTag = `<style>body { line-height: ${pageSettings?.lineSpacing ?? settings.lineHeight}; font-family: ${pageSettings?.fontFamily ?? settings.fontFamily}; }</style>`;
+          contentToUpload = `${styleTag}${toc2}${html}`;
+        }
       }
 
       const resp = await fetch('/api/drive/upload', {

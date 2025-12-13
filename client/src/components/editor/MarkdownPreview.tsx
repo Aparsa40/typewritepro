@@ -26,6 +26,17 @@ export function MarkdownPreview() {
         link.setAttribute("rel", "noopener noreferrer");
       });
     }
+    // Load character mapping attached as JSON script into window.__typewriter_char_map
+    try {
+      const script = previewRef.current?.querySelector('#typewriter-char-map');
+      if (script && script.textContent) {
+        (window as any).__typewriter_char_map = (window as any).__typewriter_char_map || {};
+        const parsed = JSON.parse(script.textContent);
+        Object.assign((window as any).__typewriter_char_map, parsed);
+      }
+    } catch (err) {
+      console.warn('Failed to parse char map', err);
+    }
   }, [html]);
 
   // Apply header line and sticky behavior if requested in page settings
@@ -46,8 +57,10 @@ export function MarkdownPreview() {
   }, [html, pageSettings]);
 
   // When editor cursor moves, scroll preview to corresponding element (data-source-line)
+  // We attempt to match not only the line but the approximate column within the line
   useEffect(() => {
     const line = cursorPosition?.line ?? 1;
+    const column = cursorPosition?.column ?? 1;
     if (!previewRef.current) return;
     // Find the exact anchor, or fallback to the nearest previous line that has an anchor
     let el = previewRef.current.querySelector(`[data-source-line="${line}"]`) as HTMLElement | null;
@@ -58,14 +71,34 @@ export function MarkdownPreview() {
       }
     }
     if (el) {
-      isSyncingFromEditor.current = true;
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      // Clear flag after a short delay
-      setTimeout(() => {
-        isSyncingFromEditor.current = false;
-      }, 250);
+      try {
+        const scrollViewport = scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") as HTMLElement;
+        // compute character fraction on the source line so we can scroll to an estimated position within the element
+        const lines = content.split('\n');
+        const lineText = (lines[line - 1] || "");
+        const frac = Math.min(1, Math.max(0, (column - 1) / Math.max(1, lineText.length)));
+
+        isSyncingFromEditor.current = true;
+
+        if (scrollViewport) {
+          const elTop = el.offsetTop;
+          const elHeight = el.clientHeight || el.scrollHeight || 0;
+          const centerOffset = scrollViewport.clientHeight / 2;
+          // Estimate target scroll top so the clicked column is approximately centered
+          const target = elTop + Math.round(elHeight * frac) - centerOffset;
+          scrollViewport.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+        } else {
+          // Fallback to simple reveal
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      } finally {
+        // Clear flag after a short delay
+        setTimeout(() => {
+          isSyncingFromEditor.current = false;
+        }, 250);
+      }
     }
-  }, [cursorPosition?.line]);
+  }, [cursorPosition?.line, cursorPosition?.column, content]);
 
   // Sync preview scroll with editor
   useEffect(() => {
@@ -115,12 +148,80 @@ export function MarkdownPreview() {
     while (element && element !== target) {
       if (element.hasAttribute("data-source-line")) {
         const line = parseInt(element.getAttribute("data-source-line") || "1");
-        (window as any).goToEditorLine?.(line);
+
+        // Try to calculate a more precise column by using caret position from click coordinates
+        let column = 1;
+        // Prefer exact mapping if available: find a parent wrapper span that has data-char-wrapper
+        try {
+          const doc: Document = target.ownerDocument || document;
+          // caretRangeFromPoint is supported in WebKit/Chrome, caretPositionFromPoint in Firefox
+          const range: Range | null = (doc as any).caretRangeFromPoint
+            ? (doc as any).caretRangeFromPoint(e.clientX, e.clientY)
+            : (doc as any).caretPositionFromPoint
+            ? (() => { const p = (doc as any).caretPositionFromPoint(e.clientX, e.clientY); const r = document.createRange(); r.setStart(p.offsetNode, p.offset); r.collapse(true); return r; })()
+            : null;
+          if (range && range.startContainer) {
+            // Find wrapper span that contains the startContainer (closest ancestor)
+            let node = range.startContainer as Node | null;
+            let wrapperEl: HTMLElement | null = null;
+            while (node && node !== target) {
+              if (node instanceof HTMLElement && node.hasAttribute('data-char-wrapper')) {
+                wrapperEl = node;
+                break;
+              }
+              node = node.parentElement;
+            }
+            if (wrapperEl && (wrapperEl as HTMLElement).hasAttribute('data-char-wrapper')) {
+              const wid = (wrapperEl as HTMLElement).getAttribute('data-char-wrapper')!;
+              const mapping = (window as any).__typewriter_char_map?.[wid];
+              if (Array.isArray(mapping)) {
+                // Expect wrapper to contain a single text node; find offset
+                const offsetInText = range.startOffset || 0;
+                // if wrapper has more than one child (like inline elements), compute offset by summing text lengths
+                let offset = offsetInText;
+                if (range.startContainer.nodeType !== Node.TEXT_NODE) {
+                  // compute offset within wrapper by iterating child text nodes
+                  let curOffset = 0;
+                  const walker = document.createTreeWalker(wrapperEl, NodeFilter.SHOW_TEXT, null);
+                  let tn = walker.nextNode() as Text | null;
+                  while (tn) {
+                    if (tn === range.startContainer) { offset = curOffset + (range.startOffset || 0); break; }
+                    curOffset += (tn.nodeValue || '').length;
+                    tn = walker.nextNode() as Text | null;
+                  }
+                }
+                const mappingIndex = offset;
+                const mappedCol = mappingIndex < mapping.length ? mapping[mappingIndex] : mapping[mapping.length - 1];
+                column = mappedCol + 1; // convert 0-based to 1-based
+              }
+            } else if (range.startContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+              // fallback to fraction mapping
+              let charOffset = range.startOffset;
+              const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+              const firstNode = walker.firstChild();
+              if (firstNode) walker.currentNode = firstNode;
+              let total = 0;
+              while (walker.nextNode()) {
+                const n = walker.currentNode;
+                if (n === range.startContainer) { total += range.startOffset; break; }
+                total += (n?.textContent?.length || 0);
+              }
+              const sourceLines = content.split('\n');
+              const sourceLine = sourceLines[line - 1] || '';
+              const fraction = total / Math.max(1, (element.textContent || '').length);
+              column = Math.max(1, Math.round(fraction * Math.max(1, sourceLine.length)));
+            }
+          }
+        } catch (err) {
+          // ignore fallback
+        }
+
+        (window as any).goToEditorPosition?.(line, column);
         break;
       }
       element = element.parentElement as HTMLElement;
     }
-  }, []);
+  }, [content]);
 
   return (
     <div

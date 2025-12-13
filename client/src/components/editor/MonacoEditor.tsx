@@ -18,6 +18,7 @@ export function MonacoEditor() {
     setDetectedDirection,
     setHeadings,
     scrollPosition,
+    pageSettings,
   } = useEditorStore();
 
   const handleEditorDidMount: OnMount = useCallback((editor, monaco) => {
@@ -29,10 +30,12 @@ export function MonacoEditor() {
       // Handle paste events from both keyboard and context menu reliably by
       // watching for paste events on the document in the capture phase and
       // ensuring the active element is inside the editor.
-      const handlePaste = (e: ClipboardEvent) => {
+        const handlePaste = (e: ClipboardEvent) => {
         // Only intercept paste events that are targeted to the editor
         const activeEl = document.activeElement as Node | null;
-        if (!activeEl || !editorDom.contains(activeEl)) return;
+        // When right-click paste is used, focus might not be on the editor; try checking monaco focus as well
+        const isEditorFocused = editor?.hasTextFocus?.() || false;
+        if (!isEditorFocused && (!activeEl || !editorDom.contains(activeEl))) return;
         e.preventDefault();
         try {
           // Prefer the clipboardData from the event (works with context menu paste)
@@ -70,8 +73,14 @@ export function MonacoEditor() {
       };
       // Capture phase ensures we receive paste events even if Monaco stops propagation
       document.addEventListener('paste', handlePaste, true);
+      // Also ensure right-click contextmenu focuses the editor so 'Paste' works
+      const handleContextMenu = (ev: Event) => { try { editor.focus(); } catch { } };
+      editorDom.addEventListener('contextmenu', handleContextMenu, true);
       // Cleanup on unmount
-      const clear = () => document.removeEventListener('paste', handlePaste, true);
+      const clear = () => {
+        document.removeEventListener('paste', handlePaste, true);
+        editorDom.removeEventListener('contextmenu', handleContextMenu, true);
+      };
       // Attach to the editor so we can remove when it's disposed
       editor.onDidDispose(clear);
     }
@@ -178,15 +187,15 @@ export function MonacoEditor() {
     setHeadings(extractHeadings(content));
   }, []);
 
-  const goToLine = useCallback((line: number) => {
+  const goToLine = useCallback((line: number, column?: number) => {
     if (editorRef.current) {
       editorRef.current.revealLineInCenter(line);
-      editorRef.current.setPosition({ lineNumber: line, column: 1 });
+      editorRef.current.setPosition({ lineNumber: line, column: column ?? 1 });
       editorRef.current.focus();
     }
   }, []);
 
-  useEffect(() => { (window as any).goToEditorLine = goToLine; }, [goToLine]);
+  useEffect(() => { (window as any).goToEditorLine = goToLine; (window as any).goToEditorPosition = goToLine; }, [goToLine]);
 
   const insertText = useCallback((text: string) => {
     if (editorRef.current) {
@@ -220,9 +229,11 @@ export function MonacoEditor() {
         onMount={handleEditorDidMount}
         theme={(["dark","dark-blue","midnight","deep-blue","plum","aurora"].includes(theme) ? "typewriter-dark" : "typewriter-light")}
         options={{
-          fontFamily: `'${settings.fontFamily}', 'Vazirmatn', 'JetBrains Mono', monospace`,
-          fontSize: settings.fontSize,
-          lineHeight: settings.lineHeight * settings.fontSize,
+          fontFamily: `${pageSettings?.fontFamily ?? settings.fontFamily}, 'Vazirmatn', 'JetBrains Mono', monospace`,
+          // If page settings specify a font, prefer that (per-page presentation), otherwise global settings
+          fontSize: pageSettings?.fontSize ?? settings.fontSize,
+          // Use workspace/page specific line spacing where provided, otherwise fall back to global settings
+          lineHeight: (pageSettings?.lineSpacing ?? settings.lineHeight) * (pageSettings?.fontSize ?? settings.fontSize),
           wordWrap: settings.wordWrap ? "on" : "off",
           lineNumbers: settings.showLineNumbers ? "on" : "off",
           minimap: { enabled: settings.showMinimap },

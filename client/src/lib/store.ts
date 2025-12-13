@@ -30,6 +30,7 @@ interface EditorState {
     fontFamily: string;
     fontSize: number;
     padding: number;
+    lineSpacing: number;
     borderStyle: "none" | "single" | "double";
     borderColor: string;
     borderWidth: number;

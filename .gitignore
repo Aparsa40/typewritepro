@@ -46,3 +46,7 @@ vite.config.ts.*
 #vscode workspace settings
 TypeWriterPro.code workspace
 workspace.code-workspace
+
+#BackUp Files
+vite.config.ts.bak
+COMMIT_MESSAGES.md.bak

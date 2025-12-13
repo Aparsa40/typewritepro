@@ -4,19 +4,26 @@
 
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { extractHeadings } from "./direction";
 
 export interface ExportOptions {
   title?: string;
   author?: string;
   date?: Date;
+  lineHeight?: number;
+  fontFamily?: string;
 }
 
 /**
  * Export به Markdown (.md)
  */
 export function exportToMarkdown(content: string, filename: string = "document.md"): void {
+  // Prepend a generated table of contents (links use markdown ID anchors that will be translated in HTML)
+  const headings = extractHeadings(content);
+  const toc = generateTOCMarkdown(headings);
+  const contentWithToc = toc ? `${toc}\n\n${content}` : content;
   const element = document.createElement("a");
-  element.setAttribute("href", "data:text/markdown;charset=utf-8," + encodeURIComponent(content));
+  element.setAttribute("href", "data:text/markdown;charset=utf-8," + encodeURIComponent(contentWithToc));
   element.setAttribute("download", filename);
   element.style.display = "none";
   document.body.appendChild(element);
@@ -29,6 +36,10 @@ export function exportToMarkdown(content: string, filename: string = "document.m
  * شامل تمام فونت‌ها و استایل‌ها
  */
 export function exportToHTML(content: string, htmlContent: string, filename: string = "document.html", options: ExportOptions = {}): void {
+  // prepend a small table of contents HTML if headings are present
+  const toc = generateTOCHTML(content);
+  const htmlWithToc = (toc ? toc + htmlContent : htmlContent);
+
   const fullHTML = `<!DOCTYPE html>
 <html lang="fa-IR" dir="rtl">
 <head>
@@ -53,8 +64,8 @@ export function exportToHTML(content: string, htmlContent: string, filename: str
     }
     
     body {
-      font-family: 'Vazirmatn', 'Inter', sans-serif;
-      line-height: 1.6;
+      font-family: ${options.fontFamily ? `'${options.fontFamily}', 'Vazirmatn', 'Inter', sans-serif` : "'Vazirmatn', 'Inter', sans-serif"};
+      line-height: ${options.lineHeight ?? 1.6};
       color: #333;
       background: white;
       padding: 2rem;
@@ -175,7 +186,7 @@ export function exportToHTML(content: string, htmlContent: string, filename: str
 </head>
 <body>
   <div class="content">
-    ${htmlContent}
+    ${htmlWithToc}
   </div>
 </body>
 </html>`;
@@ -196,6 +207,7 @@ export function exportToHTML(content: string, htmlContent: string, filename: str
 export async function exportToPDF(htmlContent: string, filename: string = "document.pdf", options: ExportOptions = {}): Promise<void> {
   try {
     // ایجاد div موقتی برای render کردن HTML
+    // Make sure PDF includes a table of contents if the content includes heading IDs
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = htmlContent;
     tempDiv.style.position = "fixed";
@@ -206,7 +218,8 @@ export async function exportToPDF(htmlContent: string, filename: string = "docum
     tempDiv.style.textAlign = "right";
     tempDiv.style.padding = "40px";
     tempDiv.style.backgroundColor = "white";
-    tempDiv.style.fontFamily = "'Vazirmatn', 'Inter', sans-serif";
+    tempDiv.style.fontFamily = options.fontFamily ? `${options.fontFamily}, 'Vazirmatn', 'Inter', sans-serif` : "'Vazirmatn', 'Inter', sans-serif";
+    tempDiv.style.lineHeight = String(options.lineHeight ?? 1.6);
     document.body.appendChild(tempDiv);
 
     // Convert to canvas
@@ -255,6 +268,28 @@ export async function exportToPDF(htmlContent: string, filename: string = "docum
     console.error("PDF export error:", error);
     throw new Error("Failed to export PDF");
   }
+}
+
+function generateTOCMarkdown(headings: Array<{ id: string; text: string; level: number; line: number }>) {
+  if (!headings || headings.length === 0) return "";
+  let md = `## Table of Contents\n\n`;
+  headings.forEach((h) => {
+    const indent = '  '.repeat(Math.max(0, h.level - 1));
+    md += `${indent}- [${h.text}](#${h.id})\n`;
+  });
+  return md;
+}
+
+function generateTOCHTML(content: string) {
+  const headings = extractHeadings(content);
+  if (!headings || headings.length === 0) return "";
+  let html = `<nav class=\"toc\" aria-label=\"Table of contents\"><h2>Table of Contents</h2><ul>`;
+  const stack: number[] = [];
+  headings.forEach((h) => {
+    html += `<li class=\"toc-level-${h.level}\"><a href=\"#${h.id}\">${h.text}</a></li>`;
+  });
+  html += `</ul></nav>`;
+  return html;
 }
 
 /**

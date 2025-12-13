@@ -1,3 +1,5 @@
+import { generateHeadingId } from "./slug";
+
 const rtlChars = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/;
 const ltrChars = /[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02B8]/;
 
@@ -94,13 +96,10 @@ export function extractHeadings(content: string): Array<{
     if (match) {
       const level = match[1].length;
       const text = match[2].trim();
-      const id = text
-        .toLowerCase()
-        .replace(/[^\w\s\u0600-\u06FF]/g, "")
-        .replace(/\s+/g, "-");
+      const id = generateHeadingId(text, index + 1);
 
       headings.push({
-        id: `heading-${index}-${id}`,
+        id: id,
         text,
         level,
         line: index + 1,

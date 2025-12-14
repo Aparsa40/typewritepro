@@ -17,6 +17,7 @@ function addDirectionToElements(html: string): string {
     const text = element.textContent || "";
     const direction = detectParagraphDirection(text);
     const htmlEl = element as HTMLElement;
+    htmlEl.setAttribute('dir', direction);
     htmlEl.style.direction = direction;
     htmlEl.style.textAlign = direction === "rtl" ? "right" : "left";
 
@@ -41,8 +42,9 @@ function addDirectionToElements(html: string): string {
 function addDirectionToPlainText(text: string): string {
   if (!text || typeof document === "undefined") return text;
 
-  // Split into paragraphs by empty lines and wrap each paragraph with its own direction
-  const paragraphs = text.split(/\n{2,}/g);
+  // Split into paragraphs by line breaks (one or more newlines) and wrap each paragraph with its own direction
+  // This ensures mixed lines get appropriate per-line direction without requiring an empty line between English and Persian
+  const paragraphs = text.split(/\n+/g);
 
   const wrapped = paragraphs
     .map((p) => {
@@ -243,6 +245,38 @@ export function renderMarkdown(content: string, autoDirection: boolean = true): 
         }
       });
 
+      // Annotate table cells with source line and cell index/range to assist click-to-caret mapping
+      const tables = tmp.querySelectorAll('table');
+      tables.forEach((table) => {
+        const rows = table.querySelectorAll('tr');
+        rows.forEach((row, rowIndex) => {
+          // attempt to find a wrapper that indicates the source line
+          const wrapper = row.querySelector('[data-char-wrapper]') as HTMLElement | null;
+          let lineNum = 0;
+          if (wrapper && wrapper.hasAttribute('data-source-line')) {
+            lineNum = parseInt(wrapper.getAttribute('data-source-line') || '0', 10);
+          } else {
+            // fallback: find preceding anchor within the row's previous siblings
+            let el: Element | null = row.previousElementSibling;
+            while (el && !el.querySelector) el = el.previousElementSibling;
+            const anchor = el ? el.querySelector('[data-source-line]') : null;
+            if (anchor) lineNum = parseInt((anchor as Element).getAttribute('data-source-line') || '0', 10);
+          }
+
+          const sourceLine = lineNum ? linesArr[lineNum - 1] || '' : '';
+          const offsets = getTableCellOffsets(sourceLine);
+          const cells = row.querySelectorAll('td,th');
+          cells.forEach((cell, i) => {
+            cell.setAttribute('data-table-cell-index', String(i));
+            if (lineNum) cell.setAttribute('data-table-source-line', String(lineNum));
+            if (offsets && i < offsets.length) {
+              const r = offsets[i];
+              cell.setAttribute('data-table-cell-range', `${r.start}:${r.end}`);
+            }
+          });
+        });
+      });
+
       const withDir = autoDirection ? addDirectionToElements(tmp.innerHTML) : tmp.innerHTML;
       // append a tiny script that exposes the mapping so the preview click handler can convert offsets
       const mapScript = `<script type="application/json" id="typewriter-char-map">${JSON.stringify(charMap)}</script>`;
@@ -262,6 +296,36 @@ export function renderMarkdown(content: string, autoDirection: boolean = true): 
     }
     return `<p>${content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`;
   }
+}
+
+/**
+ * Compute indices (start/end) for each markdown table cell on a single source line.
+ * This attempts to ignore pipes inside inline code fences/backticks.
+ */
+export function getTableCellOffsets(line: string): Array<{ start: number; end: number }> {
+  const offsets: Array<{ start: number; end: number }> = [];
+  if (!line) return offsets;
+
+  let inBacktick = false;
+  let lastIdx = 0;
+  const appendCell = (from: number, to: number) => { offsets.push({ start: from, end: to }); };
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '`') {
+      inBacktick = !inBacktick;
+      continue;
+    }
+    if (!inBacktick && ch === '|') {
+      // cell boundary between lastIdx and i
+      appendCell(lastIdx, i);
+      lastIdx = i + 1;
+    }
+  }
+  // trailing cell
+  appendCell(lastIdx, line.length);
+  // Trim whitespace-only cells by merging now - we still keep offsets but trimmed at edges
+  return offsets.map(o => ({ start: o.start + (line.slice(o.start, o.end).match(/^\s*/)?.[0]?.length || 0), end: o.end - (line.slice(o.start, o.end).match(/\s*$/)?.[0]?.length || 0) }));
 }
 
 export function getMarkdownStyles(_theme?: string): string {

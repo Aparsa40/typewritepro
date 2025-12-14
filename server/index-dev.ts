@@ -15,13 +15,29 @@ import runApp from "./app";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 dotenv.config();
+import { ensureIndex as ensureDriveTokenIndex } from './services/driveTokenService';
+import { isKeyEphemeral } from './utils/tokenEncryption';
 
 async function connectMongo() {
   try {
+    if (!process.env.MONGO_URI) {
+      console.warn('MONGO_URI not set; skipping MongoDB connection. Running with in-memory MemStorage unless ENABLE_PERSISTENCE is configured.');
+      return;
+    }
+    // If persistence enabled, require OAUTH_TOKEN_ENCRYPTION_KEY to be set
+    if (process.env.ENABLE_PERSISTENCE === 'true' && !process.env.OAUTH_TOKEN_ENCRYPTION_KEY) {
+      console.error('ENABLE_PERSISTENCE=true but OAUTH_TOKEN_ENCRYPTION_KEY is not set - refusing to start in dev to avoid storing unencrypted tokens');
+      process.exit(1);
+    }
     await mongoose.connect(process.env.MONGO_URI!, {
       dbName: "typewritepro"
     });
     console.log("Connected to MongoDB Atlas!");
+    if (process.env.ENABLE_PERSISTENCE === 'true' && isKeyEphemeral()) {
+      console.error('ENABLE_PERSISTENCE is true but OAUTH_TOKEN_ENCRYPTION_KEY is not set. Aborting startup.');
+      process.exit(1);
+    }
+    try { await ensureDriveTokenIndex(); } catch (e) { console.warn('Failed to ensure DriveToken index', e); }
   } catch (err) {
     console.error("MongoDB connection error:", err);
     process.exit(1);

@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useRef, useCallback } from "react";
 import { useEditorStore } from "@/lib/store";
-import { renderMarkdown, getMarkdownStyles } from "@/lib/markdown";
+import { renderMarkdown, getMarkdownStyles, getTableCellOffsets } from "@/lib/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ImageEditorOverlay } from "./ImageEditorOverlay";
 
@@ -210,6 +210,36 @@ export function MarkdownPreview() {
               const sourceLine = sourceLines[line - 1] || '';
               const fraction = total / Math.max(1, (element.textContent || '').length);
               column = Math.max(1, Math.round(fraction * Math.max(1, sourceLine.length)));
+            } else {
+              // Fallback: If click inside a table cell and we couldn't get mapping, approximate by cell fraction
+              const cellEl = (e.target as HTMLElement).closest('td,th') as HTMLTableCellElement | null;
+              if (cellEl) {
+                try {
+                  const cellIndex = cellEl.cellIndex; // 0-based
+                  const sourceLines = content.split('\n');
+                  const sourceLine = sourceLines[line - 1] || '';
+                  const offsets = getTableCellOffsets(sourceLine);
+                  // If we annotated ranges on the cell element, prefer those for precise mapping
+                  const rangeAttr = cellEl.getAttribute('data-table-cell-range');
+                  let start = 0, end = sourceLine.length;
+                  if (rangeAttr) {
+                    const [s, e] = rangeAttr.split(':').map((x) => parseInt(x, 10));
+                    if (!Number.isNaN(s) && !Number.isNaN(e)) { start = s; end = e; }
+                  }
+                  // If line doesn't look like a table, skip
+                  if (offsets && offsets.length > 0) {
+                    const idx = Math.min(cellIndex, offsets.length - 1);
+                    const cOffset = offsets[idx];
+                    // Use precise start/end from attribute when present, otherwise fallback to computed
+                    if (!rangeAttr) { start = cOffset.start; end = cOffset.end; }
+                    const rect = cellEl.getBoundingClientRect();
+                    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width)));
+                    column = Math.max(1, Math.round(start + frac * Math.max(1, end - start)));
+                  }
+                } catch (err) {
+                  // ignore
+                }
+              }
             }
           }
         } catch (err) {

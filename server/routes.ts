@@ -4,16 +4,28 @@ import { storage } from "./storage";
 import { insertDocumentSchema } from "@shared/schema";
 import fetch from 'node-fetch';
 import { nanoid } from 'nanoid';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { saveTokenPersisted, getTokenEntry, refreshIfNeeded, listAllTokens, removeToken } from './services/driveTokenService';
 
 dotenv.config();
 
 // In-memory map for storing OAuth tokens (for demo / dev only)
 const driveTokens = new Map<string, any>();
 
+// If mongoose connected, tokens are persisted using the DriveToken model + driveTokenService.
+
 // Normalize base URL and redirect URI to avoid mismatches
-const BASE_URL = (process.env.BASE_URL || `http://localhost:${process.env.PORT || 5050}`).replace(/\/+$/g, '');
-const GOOGLE_REDIRECT_URI = (process.env.GOOGLE_REDIRECT_URI || `${BASE_URL}/auth/google/callback`).replace(/\/+$/g, '');
+const providedBaseUrl = (process.env.BASE_URL || `http://localhost:${process.env.PORT || 5050}`).replace(/\/+$/g, '');
+const defaultRedirect = `${providedBaseUrl}/auth/google/callback`;
+const providedRedirectUri = process.env.GOOGLE_REDIRECT_URI ? process.env.GOOGLE_REDIRECT_URI.replace(/\/+$/g, '') : undefined;
+const BASE_URL = providedBaseUrl;
+const GOOGLE_REDIRECT_URI = providedRedirectUri || defaultRedirect;
+
+// Helpful logging if redirect mismatches expected default
+if (providedRedirectUri && providedRedirectUri !== defaultRedirect) {
+  console.warn('[OAuth] WARNING: GOOGLE_REDIRECT_URI environment variable does not match computed default.', { providedRedirectUri, defaultRedirect });
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/documents", async (req, res) => {
@@ -110,17 +122,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }),
       });
 
-      const tokenJson = await tokenRes.json();
-      // store tokens in memory
+      const tokenJson: any = await tokenRes.json();
+      // store tokens either in DB (if connected) or memory (dev/demo)
       const tokenId = nanoid();
-      driveTokens.set(tokenId, { token: tokenJson, createdAt: Date.now() });
+      // const dbPayload = { tokenId, token: tokenJson, createdAt: Date.now() };
+      try {
+        if (mongoose.connection.readyState === 1 && process.env.ENABLE_PERSISTENCE === 'true') {
+          // store persistent token (encrypted) in DB
+          await saveTokenPersisted(tokenId, tokenJson);
+        } else {
+          const createdAt = Date.now();
+          const expiresIn = tokenJson.expires_in ? Number(tokenJson.expires_in) : undefined;
+          const expiresAt = expiresIn ? createdAt + expiresIn * 1000 : undefined;
+          driveTokens.set(tokenId, { token: tokenJson, createdAt, expiresAt });
+        }
+      } catch (err) {
+        console.warn('[OAuth] Failed to persist token:', err);
+        const createdAt = Date.now();
+        const expiresIn = tokenJson.expires_in ? Number(tokenJson.expires_in) : undefined;
+        const expiresAt = expiresIn ? createdAt + expiresIn * 1000 : undefined;
+        driveTokens.set(tokenId, { token: tokenJson, createdAt, expiresAt });
+      }
 
       // Return an HTML page that posts message to opener and closes
-      const payload = JSON.stringify({ tokenId });
+      const postPayload = JSON.stringify({ tokenId });
       return res.send(`<!doctype html><html><body>
         <script>
           try {
-            window.opener && window.opener.postMessage(${payload}, '*');
+            window.opener && window.opener.postMessage(${postPayload}, '*');
           } catch(e) {}
           document.write('Connected. You can close this window.');
         </script>
@@ -134,18 +163,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Status for a tokenId
   app.get('/api/drive/status/:tokenId', (req, res) => {
     const tokenId = req.params.tokenId;
-    const entry = driveTokens.get(tokenId);
-    if (!entry) return res.status(404).json({ connected: false });
-    res.json({ connected: true, createdAt: entry.createdAt });
+    // check DB first
+    (async () => {
+      try {
+        if (mongoose.connection.readyState === 1 && process.env.ENABLE_PERSISTENCE === 'true') {
+          const entry = await getTokenEntry(tokenId);
+          if (!entry) return res.status(404).json({ connected: false });
+          return res.json({ connected: true, createdAt: entry.createdAt || null, expiresAt: entry.expiresAt || null, scope: entry.scope || null });
+        }
+        const entry = driveTokens.get(tokenId);
+        if (!entry) return res.status(404).json({ connected: false });
+        return res.json({ connected: true, createdAt: entry.createdAt, expiresAt: entry.expiresAt || null, scope: null });
+      } catch (err) {
+        console.error('Drive status error', err);
+        return res.status(500).json({ connected: false });
+      }
+    })();
+  });
+
+  // List all persisted Drive tokens (DB only)
+  app.get('/api/drive/tokens', async (req, res) => {
+    try {
+      if (mongoose.connection.readyState === 1 && process.env.ENABLE_PERSISTENCE === 'true') {
+        const all = await listAllTokens();
+        return res.json({ tokens: all });
+      }
+      // Fallback: return in-memory tokens
+      const items: Array<{ tokenId: string; createdAt?: number; expiresAt?: number; scope?: string }> = [];
+      for (const [tokenId, entry] of Array.from(driveTokens.entries())) {
+        items.push({ tokenId, createdAt: entry.createdAt, expiresAt: entry.expiresAt, scope: entry.token?.scope || null });
+      }
+      return res.json({ tokens: items });
+    } catch (err) {
+      console.error('Drive tokens list error', err);
+      return res.status(500).json({ error: 'Failed to list tokens' });
+    }
+  });
+
+  // Delete a persisted Drive token
+  app.delete('/api/drive/tokens/:tokenId', async (req, res) => {
+    try {
+      if (!(mongoose.connection.readyState === 1 && process.env.ENABLE_PERSISTENCE === 'true')) {
+        // If not persistent, delete in-memory token
+        const tokenId = req.params.tokenId;
+        const existed = driveTokens.delete(tokenId);
+        return res.json({ success: !!existed });
+      }
+      const tokenId = req.params.tokenId;
+      await removeToken(tokenId);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error('Drive token delete error', err);
+      return res.status(500).json({ error: 'Failed to delete token' });
+    }
+  });
+
+  // Info: which storage implementation is currently active
+  app.get('/api/storage-type', (req, res) => {
+    const type = process.env.ENABLE_PERSISTENCE === 'true' && process.env.MONGO_URI ? 'mongo' : 'memory';
+    res.json({ storageType: type });
+  });
+
+  // Debug helper for OAuth settings
+  app.get('/api/oauth-info', (req, res) => {
+    res.json({
+      BASE_URL,
+      computedDefaultRedirect: defaultRedirect,
+      providedRedirectUri: providedRedirectUri || null,
+      usedRedirectUri: GOOGLE_REDIRECT_URI,
+    });
   });
 
   // Upload file to Drive using stored tokenId. Accepts JSON { tokenId, name, mimeType, content } where content is base64 or text.
   app.post('/api/drive/upload', async (req, res) => {
-    try {
-      const { tokenId, name, mimeType, content } = req.body as { tokenId?: string; name?: string; mimeType?: string; content?: string };
-      if (!tokenId || !driveTokens.has(tokenId)) return res.status(400).json({ error: 'Not connected' });
-      const tokenEntry = driveTokens.get(tokenId);
-      const accessToken = tokenEntry.token?.access_token;
+      try {
+        const { tokenId, name, mimeType, content } = req.body as { tokenId?: string; name?: string; mimeType?: string; content?: string };
+      if (!tokenId) return res.status(400).json({ error: 'Not connected' });
+
+      let accessToken: string | undefined = undefined;
+      try {
+        if (mongoose.connection.readyState === 1 && process.env.ENABLE_PERSISTENCE === 'true') {
+          const refreshed = await refreshIfNeeded(tokenId);
+          if (!refreshed) return res.status(400).json({ error: 'Not connected' });
+          accessToken = refreshed.access_token;
+        } else {
+          if (!driveTokens.has(tokenId)) return res.status(400).json({ error: 'Not connected' });
+          const tokenEntry = driveTokens.get(tokenId);
+          // If memory-stored tokens have expiresAt saved, refresh if needed
+          const now = Date.now();
+          if (tokenEntry.expiresAt && tokenEntry.expiresAt - now < 60 * 1000) {
+            // attempt to refresh in-memory token using refresh_token
+            const refreshToken = tokenEntry.token?.refresh_token;
+            if (refreshToken) {
+              const clientId = process.env.GOOGLE_CLIENT_ID || '';
+              const clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
+              const params = new URLSearchParams();
+              params.set('client_id', clientId);
+              params.set('client_secret', clientSecret);
+              params.set('grant_type', 'refresh_token');
+              params.set('refresh_token', refreshToken);
+              const tokenRes = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params });
+              if (tokenRes.ok) {
+                const tokenJson: any = await tokenRes.json();
+                tokenEntry.token.access_token = tokenJson.access_token;
+                const expiresIn = tokenJson.expires_in ? Number(tokenJson.expires_in) : undefined;
+                tokenEntry.expiresAt = expiresIn ? Date.now() + expiresIn * 1000 : tokenEntry.expiresAt;
+              }
+            }
+          }
+          accessToken = tokenEntry.token?.access_token;
+        }
+      } catch (err) {
+        console.error('Drive token fetch error', err);
+        return res.status(500).json({ error: 'Token fetch error' });
+      }
       if (!accessToken) return res.status(400).json({ error: 'No access token' });
 
       // Build multipart request

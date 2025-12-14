@@ -40,6 +40,22 @@ export function detectParagraphDirection(text: string): "ltr" | "rtl" {
   const trimmed = text.trim();
   if (!trimmed) return "ltr";
 
+  // Remove punctuation and whitespace; keep letters to count
+  const cleaned = trimmed.replace(/\s|[0-9.,!?;:'"()\[\]{}<>@#$%^&*+=\-_\/\\|~`]/g, "");
+  if (cleaned.length === 0) return "ltr";
+
+  let rtlCount = 0;
+  let ltrCount = 0;
+  for (const ch of cleaned) {
+    if (rtlChars.test(ch)) rtlCount++;
+    else if (ltrChars.test(ch)) ltrCount++;
+  }
+
+  // If there's a dominant language, prefer it. If tied or both zero, fall back
+  if (rtlCount > ltrCount) return "rtl";
+  if (ltrCount > rtlCount) return "ltr";
+
+  // Tie or no clear winner: fall back to first strong character as legacy behavior
   for (const char of trimmed) {
     if (rtlChars.test(char)) return "rtl";
     if (ltrChars.test(char)) return "ltr";
@@ -69,6 +85,7 @@ export function wrapParagraphsWithDirection(html: string, autoDirection: boolean
   blockElements.forEach((element) => {
     const text = element.textContent || "";
     const direction = detectParagraphDirection(text);
+    (element as HTMLElement).setAttribute('dir', direction);
     (element as HTMLElement).style.direction = direction;
     (element as HTMLElement).style.textAlign = direction === "rtl" ? "right" : "left";
   });

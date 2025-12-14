@@ -27,20 +27,19 @@ export function MonacoEditor() {
     // Add paste event listener to support context-menu Paste
     const editorDom = editor.getDomNode();
     if (editorDom) {
-      // Handle paste events from both keyboard and context menu reliably by
-      // watching for paste events on the document in the capture phase and
-      // ensuring the active element is inside the editor.
-        const handlePaste = (e: ClipboardEvent) => {
-        // Only intercept paste events that are targeted to the editor
-        const activeEl = document.activeElement as Node | null;
-        // When right-click paste is used, focus might not be on the editor; try checking monaco focus as well
-        const isEditorFocused = editor?.hasTextFocus?.() || false;
-        if (!isEditorFocused && (!activeEl || !editorDom.contains(activeEl))) return;
-        e.preventDefault();
+      // Handle paste events from both keyboard and context menu reliably
+      const handlePaste = (e: ClipboardEvent) => {
         try {
-          // Prefer the clipboardData from the event (works with context menu paste)
+          // Focus editor immediately
+          editor.focus();
+          
+          // Get text from clipboard event
           const text = e.clipboardData?.getData("text/plain") || "";
+          
+          // Insert text if we have it
           if (text && editor) {
+            e.preventDefault();
+            e.stopPropagation();
             const selection = editor.getSelection();
             if (selection) {
               editor.executeEdits("paste-event", [
@@ -51,37 +50,48 @@ export function MonacoEditor() {
                 },
               ]);
             }
-          }
-        } catch (err) {
-          // Fallback: attempt to read via deprecated clipboard API if available
-          (async () => {
-            try {
-              const cbText = await navigator.clipboard.readText();
-              if (cbText && editor) {
+          } else if (!text) {
+            // If no text in event, try async clipboard API as fallback
+            navigator.clipboard.readText().then((clipText) => {
+              if (clipText && editor) {
                 const selection = editor.getSelection();
                 if (selection) {
-                  editor.executeEdits("paste-event", [
-                    { range: selection, text: cbText, forceMoveMarkers: true },
+                  editor.executeEdits("paste-fallback", [
+                    {
+                      range: selection,
+                      text: clipText,
+                      forceMoveMarkers: true,
+                    },
                   ]);
                 }
               }
-            } catch (err2) {
-              console.warn("Clipboard paste failed:", err2);
-            }
-          })();
+            }).catch(err => console.warn("Clipboard read failed:", err));
+          }
+        } catch (err) {
+          console.error("Paste handler error:", err);
         }
       };
-      // Capture phase ensures we receive paste events even if Monaco stops propagation
+      
+      // Listen for paste on the document with capture phase
       document.addEventListener('paste', handlePaste, true);
-      // Also ensure right-click contextmenu focuses the editor so 'Paste' works
-      const handleContextMenu = (ev: Event) => { try { editor.focus(); } catch { } };
+      
+      // Also listen on the editor DOM directly
+      editorDom.addEventListener('paste', handlePaste, true);
+      
+      // Ensure editor is focused when right-click context menu opens
+      const handleContextMenu = (ev: Event) => {
+        try {
+          editor.focus();
+        } catch { /* ignore */ }
+      };
       editorDom.addEventListener('contextmenu', handleContextMenu, true);
+      
       // Cleanup on unmount
       const clear = () => {
         document.removeEventListener('paste', handlePaste, true);
+        editorDom.removeEventListener('paste', handlePaste, true);
         editorDom.removeEventListener('contextmenu', handleContextMenu, true);
       };
-      // Attach to the editor so we can remove when it's disposed
       editor.onDidDispose(clear);
     }
 

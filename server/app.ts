@@ -8,6 +8,7 @@ import express, {
 } from "express";
 
 import { registerRoutes } from "./routes";
+import { startScheduler } from './services/driveTokenScheduler';
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -88,5 +89,13 @@ export default async function runApp(
   const port = parseInt(process.env.PORT || '5050', 10);
   server.listen(port, () => {
     log(`serving on port ${port}`);
+    // Start scheduler if persistence enabled and DB is available
+    try {
+      if (process.env.ENABLE_PERSISTENCE === 'true' && process.env.MONGO_URI) {
+        startScheduler();
+      }
+    } catch (e) {
+      log('Could not start drive token scheduler: ' + (e as any).message, 'scheduler');
+    }
   });
 }

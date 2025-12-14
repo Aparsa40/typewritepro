@@ -22,6 +22,7 @@ import {
   List,
   Settings,
   FileDown,
+  Trash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +54,7 @@ import { HeaderTemplateDialog } from "./dialogs/HeaderTemplateDialog";
 import { BorderDialog } from "./dialogs/BorderDialog";
 import { WorkspaceDialog } from "./dialogs/WorkspaceDialog";
 import { ImageInsertDialog } from "./dialogs/ImageInsertDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 
 export function MenuBar() {
   const {
@@ -70,7 +72,6 @@ export function MenuBar() {
     toggleTableBuilder,
     newDocument,
     saveDocument,
-    createPageInCurrentWorkspace,
     settings,
     pageSettings,
   } = useEditorStore();
@@ -401,6 +402,39 @@ export function MenuBar() {
     }
   }, [driveTokenId, content, renderMarkdown, toast]);
 
+  const [driveTokensList, setDriveTokensList] = useState<Array<{ tokenId: string; createdAt?: number; expiresAt?: number; scope?: string }>>([]);
+  const [manageDriveOpen, setManageDriveOpen] = useState(false);
+
+  const openManageDrive = useCallback(async () => {
+    try {
+      const resp = await fetch('/api/drive/tokens');
+      if (!resp.ok) {
+        const json = await resp.json().catch(() => ({}));
+        toast({ title: 'Manage Drive', description: `Not available: ${json?.error || resp.statusText}`, variant: 'destructive' });
+        return;
+      }
+      const json = await resp.json();
+      setDriveTokensList(json.tokens || []);
+      setManageDriveOpen(true);
+    } catch (e) {
+      console.error('Manage Drive error', e);
+      toast({ title: 'Manage Drive', description: 'Failed to fetch tokens', variant: 'destructive' });
+    }
+  }, [toast]);
+
+  const deleteDriveToken = useCallback(async (tokenId: string) => {
+    try {
+      const resp = await fetch(`/api/drive/tokens/${tokenId}`, { method: 'DELETE' });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw json;
+      setDriveTokensList((cur) => cur.filter((t) => t.tokenId !== tokenId));
+      toast({ title: 'Removed', description: 'Drive Connection removed.' });
+    } catch (e) {
+      console.error('Delete Drive token error', e);
+      toast({ title: 'Delete failed', description: 'Could not remove token', variant: 'destructive' });
+    }
+  }, [toast]);
+
   return (
     <header className="h-12 border-b bg-background flex items-center justify-between px-2 gap-1 flex-shrink-0" data-testid="menu-bar">
       <div className="flex items-center gap-1">
@@ -460,6 +494,10 @@ export function MenuBar() {
                 <DropdownMenuItem onClick={connectToDrive} data-testid="menu-drive-connect">
                   <Cloud className="mr-2 h-4 w-4" />
                   Connect to Google Drive
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={openManageDrive} data-testid="menu-drive-manage">
+                  <List className="mr-2 h-4 w-4" />
+                  Manage Drive Connections
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => saveToDrive('md')} data-testid="menu-drive-save-md">
                   <FileText className="mr-2 h-4 w-4" />
@@ -575,36 +613,15 @@ export function MenuBar() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" data-testid="menu-tools">
-              Tools
+            <Button variant="ghost" size="sm" data-testid="menu-editor">
+              Editor
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem onClick={toggleTableBuilder} data-testid="menu-tools-table">
-              <Table2 className="mr-2 h-4 w-4" />
-              Table Builder
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={toggleSidebar} data-testid="menu-tools-outline">
-              <List className="mr-2 h-4 w-4" />
-              Document Outline
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <FileText className="mr-2 h-4 w-4" />
-                Workspace
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <WorkspaceDialog />
-                <div className="px-2">
-                  <Button variant="ghost" size="sm" onClick={() => createPageInCurrentWorkspace("New Page")} className="w-full text-xs">Create Page in Workspace</Button>
-                </div>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <FileCode className="mr-2 h-4 w-4" />
-                Markdown Tools
+                Insert Element
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="flex flex-col gap-1 p-2">
                 <HeadingDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
@@ -616,9 +633,6 @@ export function MenuBar() {
                 <CodeDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
                 <ParagraphDialog onInsert={(text) => (window as any).insertTextAtCursor?.(text)} />
                 <div className="px-2">
-                  <Button variant="ghost" size="sm" onClick={openAsLiveHTML} className="w-full text-xs">Render as Live HTML/CSS/JS</Button>
-                </div>
-                <div className="px-2">
                   <input id="menu-insert-image-input" type="file" accept="image/*" style={{ display: 'none' }} onChange={async (e) => {
                     const file = (e.target as HTMLInputElement).files?.[0];
                     if (!file) return;
@@ -629,6 +643,38 @@ export function MenuBar() {
                   }} />
                   <Button variant="ghost" size="sm" onClick={() => document.getElementById('menu-insert-image-input')?.click()} className="w-full text-xs">Insert Image</Button>
                 </div>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={toggleTableBuilder} data-testid="menu-editor-table">
+              <Table2 className="mr-2 h-4 w-4" />
+              Table Builder
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={toggleSidebar} data-testid="menu-editor-outline">
+              <List className="mr-2 h-4 w-4" />
+              Document Outline
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={openAsLiveHTML}>
+              <FileCode className="mr-2 h-4 w-4" />
+              Render as Live HTML/CSS/JS
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" data-testid="menu-tools">
+              Tools
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <FileText className="mr-2 h-4 w-4" />
+                Workspace
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <WorkspaceDialog />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
@@ -658,6 +704,39 @@ export function MenuBar() {
           <Settings className="h-4 w-4" />
         </Button>
       </div>
+
+      <Dialog open={manageDriveOpen} onOpenChange={(v) => setManageDriveOpen(v)}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Manage Drive Connections</DialogTitle>
+            <DialogDescription>List and remove persisted Drive OAuth connections.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            {driveTokensList.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No persisted Drive connections found.</div>
+            ) : (
+              <ul className="space-y-2">
+                {driveTokensList.map((t) => (
+                  <li key={t.tokenId} className="flex items-center justify-between gap-2">
+                    <div className="flex-1">
+                      <div className="font-mono text-xs text-muted-foreground">{t.tokenId}</div>
+                      <div className="text-sm text-muted-foreground">{t.scope} • Added: {t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'} • Expires: {t.expiresAt ? new Date(t.expiresAt).toLocaleString() : '—'}</div>
+                    </div>
+                    <div>
+                      <Button variant="ghost" size="icon" onClick={() => deleteDriveToken(t.tokenId)}>
+                        <Trash className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setManageDriveOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ImageInsertDialog 
         open={imageInsertOpen} 
